@@ -7,7 +7,7 @@ import datetime
 
 import ms_utils
 
-class TPS_settings:
+class ms_settings:
     def __init__(self, settings_file):
         self.settings_file = settings_file
         self.process_settings(settings_file)
@@ -46,10 +46,10 @@ class TPS_settings:
         int_keys = [ 'first_base_to_keep', 'last_base_to_keep', 'max_reads_to_split', 'minimum_reads_for_inclusion',
                      'pool_5trim', 'pool_3trim', 'min_post_adaptor_length']
         #float_keys = []
-        str_keys = ['adaptor_sequence', 'rrna_index', 'genome_index', 'pool_append', 'pool_prepend', 'primer_sequence']
+        str_keys = ['read1_suffix', 'read2_suffix', 'adaptor_sequence', 'rrna_index', 'genome_index', 'pool_append', 'pool_prepend', 'primer_sequence']
         boolean_keys = ['collapse_identical_reads', 'force_read_resplit', 'force_remapping', 'force_recollapse',
                         'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor']
-        list_str_keys = ['fastq_gz_files', 'sample_names']
+        list_str_keys = ['fastq_gz_prefixes', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['pool_fasta',]
         config = ConfigParser.ConfigParser()
@@ -78,8 +78,13 @@ class TPS_settings:
             settings[k] = simplejson.loads(settings[k])
         self.fqdir = settings['fastq_dir']
         self.sample_names = settings['sample_names']
-        self.fastq_gz_file_handles = [os.path.join(self.fqdir, fastq_gz_file) for fastq_gz_file in
-                                      settings['fastq_gz_files']]
+        #for paired end reads, there are now 2 fastq files per sample, at least that's how MIT provides the data.
+        self.fastq_gz_read1_files = [fastq_gz_prefix+settings['read1_suffix'] for fastq_gz_prefix in
+                                      settings['fastq_gz_prefixes']]
+        self.fastq_gz_read2_files = [fastq_gz_prefix + settings['read2_suffix'] for fastq_gz_prefix in
+                                     settings['fastq_gz_prefixes']]
+        self.fastq_gz_files = self.fastq_gz_read1_files + self.fastq_gz_read2_files
+        self.fastq_gz_file_handles = [os.path.join(self.fqdir, fastq_gz_file) for fastq_gz_file in self.fastq_gz_files]
         for file_handle in self.fastq_gz_file_handles:
             assert ms_utils.file_exists(file_handle)
         for k in extant_files:
@@ -87,6 +92,7 @@ class TPS_settings:
         self.settings = settings
         self.wdir = settings['working_dir']
         self.rdir = settings['results_dir']
+        ms_utils.make_dir(self.rdir)
         shutil.copy(settings_file, self.rdir)
 
     def check_barcode_lens(self):
