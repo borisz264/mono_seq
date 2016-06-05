@@ -36,20 +36,19 @@ class ms_settings:
         for i in range(len(self.sample_names)):
             yield ms_lib_settings(self,
                                   self.sample_names[i],
-                                  self.fastq_gz_file_handles[i])
+                                  self.read1_fastq_gz_file_handles[i], self.read2_fastq_gz_file_handles[i])
 
     def process_settings(self, settings_file):
         """
         - reads the settings file and converts str to float, list, etc.
         - stores result in self.settings as a dict()
         """
-        int_keys = [ 'first_base_to_keep', 'last_base_to_keep', 'max_reads_to_split', 'minimum_reads_for_inclusion',
+        int_keys = [ 'first_base_to_keep', 'last_base_to_keep', 'minimum_reads_for_inclusion',
                      'pool_5trim', 'pool_3trim', 'min_post_adaptor_length']
         #float_keys = []
         str_keys = ['read1_suffix', 'read2_suffix', 'read1_3p_adaptor_sequence', 'read2_5p_adaptor_sequence', 'rrna_index', 'genome_index', 'pool_append',
                     'pool_prepend']
-        boolean_keys = ['force_read_resplit', 'force_remapping',
-                        'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor']
+        boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor']
         list_str_keys = ['fastq_gz_prefixes', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['pool_fasta',]

@@ -109,10 +109,12 @@ class mse:
         -o is the read1 output file
         -p is the read2 output file
         """
-        command_to_run = 'cutadapt -a %s -G %s --overlap 5 --minimum-length %d --pair-filter=both -o %s -p %s 1>>%s 2>>%s' % (
-            self.settings.get_property('read1_adaptor_sequence'), self.settings.get_property('read2_adaptor_sequence'),self.settings.get_property('min_post_adaptor_length'),
-                           lib_settings.get_paired_fastq_gz_files()[0], lib_settings.get_paired_fastq_gz_files()[1], lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_log(),
-                           lib_settings.get_log())
+        command_to_run = 'cutadapt -a %s -G %s --overlap 5 --minimum-length %d --pair-filter=both -o %s -p %s %s %s 1>>%s 2>>%s' % (
+            self.settings.get_property('read1_3p_adaptor_sequence'), self.settings.get_property('read2_5p_adaptor_sequence'),
+            self.settings.get_property('min_post_adaptor_length'),
+            lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_adaptor_trimmed_reads()[1],
+            lib_settings.get_paired_fastq_gz_files()[0], lib_settings.get_paired_fastq_gz_files()[1],
+            lib_settings.get_log(), lib_settings.get_log())
         subprocess.Popen(command_to_run, shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
 
