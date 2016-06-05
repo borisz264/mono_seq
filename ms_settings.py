@@ -34,9 +34,9 @@ class ms_settings:
 
     def iter_lib_settings(self):
         for i in range(len(self.sample_names)):
-            yield TPS_lib_settings(self,
-              self.sample_names[i],
-              self.fastq_gz_file_handles[i])
+            yield ms_lib_settings(self,
+                                  self.sample_names[i],
+                                  self.fastq_gz_file_handles[i])
 
     def process_settings(self, settings_file):
         """
@@ -46,8 +46,9 @@ class ms_settings:
         int_keys = [ 'first_base_to_keep', 'last_base_to_keep', 'max_reads_to_split', 'minimum_reads_for_inclusion',
                      'pool_5trim', 'pool_3trim', 'min_post_adaptor_length']
         #float_keys = []
-        str_keys = ['read1_suffix', 'read2_suffix', 'adaptor_sequence', 'rrna_index', 'genome_index', 'pool_append', 'pool_prepend', 'primer_sequence']
-        boolean_keys = ['collapse_identical_reads', 'force_read_resplit', 'force_remapping', 'force_recollapse',
+        str_keys = ['read1_suffix', 'read2_suffix', 'read1_3p_adaptor_sequence', 'read2_5p_adaptor_sequence', 'rrna_index', 'genome_index', 'pool_append',
+                    'pool_prepend']
+        boolean_keys = ['force_read_resplit', 'force_remapping',
                         'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor']
         list_str_keys = ['fastq_gz_prefixes', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
@@ -84,6 +85,11 @@ class ms_settings:
         self.fastq_gz_read2_files = [fastq_gz_prefix + settings['read2_suffix'] for fastq_gz_prefix in
                                      settings['fastq_gz_prefixes']]
         self.fastq_gz_files = self.fastq_gz_read1_files + self.fastq_gz_read2_files
+        self.read1_fastq_gz_file_handles = [os.path.join(self.fqdir, fastq_gz_file)
+                                            for fastq_gz_file in self.fastq_gz_read1_files]
+        self.read2_fastq_gz_file_handles = [os.path.join(self.fqdir, fastq_gz_file)
+                                            for fastq_gz_file in self.fastq_gz_read2_files]
+
         self.fastq_gz_file_handles = [os.path.join(self.fqdir, fastq_gz_file) for fastq_gz_file in self.fastq_gz_files]
         for file_handle in self.fastq_gz_file_handles:
             assert ms_utils.file_exists(file_handle)
@@ -152,11 +158,12 @@ class ms_settings:
           'trimmed_pool_seqs.fasta')
         return log
 
-class TPS_lib_settings:
-    def __init__(self, experiment_settings, sample_name, fastq_gz_filehandle):
+class ms_lib_settings:
+    def __init__(self, experiment_settings, sample_name, read1_fastq_gz_filehandle, read2_fastq_gz_filehandle):
         self.experiment_settings = experiment_settings
         self.sample_name = sample_name
-        self.fastq_gz_filehandle = fastq_gz_filehandle
+        self.read1_fastq_gz_filehandle = read1_fastq_gz_filehandle
+        self.read2_fastq_gz_filehandle = read2_fastq_gz_filehandle
 
     def get_property(self, property):
         return self.experiment_settings.get_property(property)
@@ -179,8 +186,8 @@ class TPS_lib_settings:
             f.write(text)
         f.close()
 
-    def get_fastq_file(self):
-        return self.fastq_gz_filehandle
+    def get_paired_fastq_gz_files(self):
+        return self.read1_fastq_gz_filehandle, self.read2_fastq_gz_filehandle
 
     def get_collapsed_reads(self):
         collapsed_reads = os.path.join(
@@ -191,20 +198,17 @@ class TPS_lib_settings:
         return collapsed_reads
 
     def get_adaptor_trimmed_reads(self):
-        collapsed_reads = os.path.join(
+        read1_collapsed_reads = os.path.join(
           self.experiment_settings.get_rdir(),
           'adaptor_removed',
-          '%(sample_name)s.fasta.gz' %
+          '%(sample_name)s_1.fasta.gz' %
            {'sample_name': self.sample_name})
-        return collapsed_reads
-
-    def get_primer_trimmed_reads(self):
-        collapsed_reads = os.path.join(
+        read2_collapsed_reads = os.path.join(
           self.experiment_settings.get_rdir(),
-          'primer_removed',
-          '%(sample_name)s.fasta.gz' %
+          'adaptor_removed',
+          '%(sample_name)s_1.fasta.gz' %
            {'sample_name': self.sample_name})
-        return collapsed_reads
+        return read1_collapsed_reads, read2_collapsed_reads
 
     def get_pool_mapping_stats(self):
         pool_mapping_stats = os.path.join(self.experiment_settings.get_rdir(), 'mapping_stats', '%(sample_name)s.pool.txt' % {'sample_name': self.sample_name})
@@ -279,25 +283,17 @@ class TPS_lib_settings:
            {'sample_name': self.sample_name})
         return summary_file
 
-    def split_reads_exist(self):
-        split_reads = self.get_split_reads()
-        return ms_utils.file_exists(split_reads)
-
     def collapsed_reads_exist(self):
         collapsed_reads = self.get_collapsed_reads()
         return ms_utils.file_exists(collapsed_reads)
 
     def adaptorless_reads_exist(self):
         adaptorless_reads = self.get_adaptor_trimmed_reads()
-        return ms_utils.file_exists(adaptorless_reads)
-
-    def primerless_reads_exist(self):
-        primerless_reads = self.get_primer_trimmed_reads()
-        return ms_utils.file_exists(primerless_reads)
+        return ms_utils.file_exists(adaptorless_reads[0]) and ms_utils.file_exists(adaptorless_reads[1])
 
     def trimmed_reads_exist(self):
         trimmed_reads = self.get_trimmed_reads()
-        return ms_utils.file_exists(trimmed_reads)
+        return ms_utils.file_exists(trimmed_reads[0]) and ms_utils.file_exists(trimmed_reads[1])
 
     def mapped_reads_exist(self):
         mapped_reads = self.get_mapped_reads()

@@ -31,9 +31,7 @@ class mse:
     def __init__(self, settings, threads):
         self.threads = threads
         self.settings = settings
-        self.collapse_identical_reads()
         self.remove_adaptor()
-        self.remove_primer()
         self.trim_reads()
         self.trim_reference_pool_fasta()
         self.build_bowtie_index()
@@ -91,39 +89,6 @@ class mse:
             of.write('\t%s' % lib.get_temperature())
         of.write('\n')
 
-    def collapse_identical_reads(self):
-        """
-        collapses all identical reads using FASTX toolkit
-        :return:
-        """
-        self.settings.write_to_log('collapsing reads')
-        if not self.settings.get_property('force_recollapse'):
-            for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.collapsed_reads_exist():
-                    break
-            else:
-                return
-        ms_utils.make_dir(self.rdir_path('collapsed_reads'))
-        if self.settings.get_property('collapse_identical_reads'):
-            ms_utils.parmap(lambda lib_setting: self.collapse_one_fastq_file(lib_setting), self.settings.iter_lib_settings(), nprocs = self.threads)
-        else:
-            ms_utils.parmap(lambda lib_setting: self.fastq_to_fasta(lib_setting), self.settings.iter_lib_settings(), nprocs = self.threads)
-        self.settings.write_to_log('collapsing reads complete')
-
-    def collapse_one_fastq_file(self, lib_settings):
-        lib_settings.write_to_log('collapsing_reads')
-        subprocess.Popen('gunzip -c %s | fastx_collapser -v -Q33 2>>%s | gzip > %s' % (lib_settings.get_fastq_file(),
-                                                                                  lib_settings.get_log(),
-                                                                                  lib_settings.get_collapsed_reads()
-                                                                                  ), shell=True).wait()
-        lib_settings.write_to_log('collapsing_reads_done')
-    def fastq_to_fasta(self, lib_settings):
-        lib_settings.write_to_log('fasta_conversion')
-        subprocess.Popen('gunzip -c %s | fastq_to_fasta -v -Q33 2>>%s | gzip > %s' % (lib_settings.get_fastq_file(),
-                                                                                  lib_settings.get_log(),
-                                                                                  lib_settings.get_collapsed_reads()
-                                                                                  ), shell=True).wait()
-        lib_settings.write_to_log('fasta_conversion done')
     def remove_adaptor(self):
         if not self.settings.get_property('force_retrim'):
             for lib_settings in self.settings.iter_lib_settings():
@@ -136,33 +101,20 @@ class mse:
             ms_utils.make_dir(self.rdir_path('adaptor_removed'))
             ms_utils.parmap(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting), self.settings.iter_lib_settings(), nprocs = self.threads)
 
-    def remove_primer(self):
-        if not self.settings.get_property('force_retrim'):
-            for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.primerless_reads_exist():
-                    break
-            else:
-                return
-
-        if self.settings.get_property('trim_adaptor'):
-            ms_utils.make_dir(self.rdir_path('primer_removed'))
-            ms_utils.parmap(lambda lib_setting: self.remove_primer_one_lib(lib_setting), self.settings.iter_lib_settings(), nprocs = self.threads)
-
     def remove_adaptor_one_lib(self, lib_settings):
         lib_settings.write_to_log('adaptor trimming')
-        command_to_run = 'cutadapt --adapter %s --overlap 3 --minimum-length %d %s --output %s 1>>%s 2>>%s' % (self.settings.get_property('adaptor_sequence'), self.settings.get_property('min_post_adaptor_length'),
-                           lib_settings.get_collapsed_reads(), lib_settings.get_adaptor_trimmed_reads(), lib_settings.get_log(),
+        """
+        -a specifies the 3' adaptor to trim from the forawrd read (read1)
+        -G specifies the 5' adaptor to trim from the reverse read (read2)
+        -o is the read1 output file
+        -p is the read2 output file
+        """
+        command_to_run = 'cutadapt -a %s -G %s --overlap 5 --minimum-length %d --pair-filter=both -o %s -p %s 1>>%s 2>>%s' % (
+            self.settings.get_property('read1_adaptor_sequence'), self.settings.get_property('read2_adaptor_sequence'),self.settings.get_property('min_post_adaptor_length'),
+                           lib_settings.get_paired_fastq_gz_files()[0], lib_settings.get_paired_fastq_gz_files()[1], lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_log(),
                            lib_settings.get_log())
         subprocess.Popen(command_to_run, shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
-
-    def remove_primer_one_lib(self, lib_settings):
-        lib_settings.write_to_log('reverse primer trimming')
-        command_to_run = 'cutadapt --adapter %s --overlap 3 --minimum-length %d %s --output %s 1>>%s 2>>%s' % (self.settings.get_property('primer_sequence'), self.settings.get_property('min_post_adaptor_length'),
-                           lib_settings.get_adaptor_trimmed_reads(), lib_settings.get_primer_trimmed_reads(), lib_settings.get_log(),
-                           lib_settings.get_log())
-        subprocess.Popen(command_to_run, shell=True).wait()
-        lib_settings.write_to_log('reverse primer trimming done')
 
     def trim_reads(self):
         """
