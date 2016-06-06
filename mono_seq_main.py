@@ -140,7 +140,7 @@ class mse:
         first_base_to_keep = self.settings.get_property('first_base_to_keep') #the trimmer is 1-indexed. 1 means keep every base
         last_base_to_keep = self.settings.get_property('last_base_to_keep')
         if self.settings.get_property('trim_adaptor'):
-            subprocess.Popen('gunzip -c %s | fastx_trimmer -f %d -l %d -z -o %s >>%s 2>>%s' % (lib_settings.get_primer_trimmed_reads(),
+            subprocess.Popen('gunzip -c %s | fastx_trimmer -f %d -l %d -z -o %s >>%s 2>>%s' % (lib_settings.get_adaptor_trimmed_reads()[0],
                                                                                       first_base_to_keep, last_base_to_keep,
                                                                                       lib_settings.get_trimmed_reads(),
                                                                                       lib_settings.get_log(),
