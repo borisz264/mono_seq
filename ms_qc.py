@@ -62,58 +62,68 @@ class TPS_qc:
         plt.savefig(out_name, transparent='True', format='pdf')
         plt.clf()
 
-    def identify_contaminating_sequences(self):
-        for lib_settings in self.experiment_settings.iter_lib_settings():
-            self.map_for_contaminating_sequences_one_lib(lib_settings)
-        for lib_settings in self.experiment_settings.iter_lib_settings():
-            self.write_mapping_summary(lib_settings.get_rRNA_mapping_stats(), lib_settings.get_pool_mapping_stats(), lib_settings.get_genome_mapping_stats(), lib_settings.get_overall_contamination_summary())
-
-
-    def map_for_contaminating_sequences_one_lib(self, lib_settings):
-        #first, take unmapped sequences and map them to yeast rRNA, counting mapping stats
-        if not ms_utils.file_exists(lib_settings.get_rRNA_unmapped_reads()):
-            subprocess.Popen('bowtie2 -f -D 20 -R 3 -N 1 -L 15 -i S,1,0.50 -x %s -p %d -U %s --un-gz %s 2>>%s | samtools view -bS - > %s 2>>%s ' % (self.experiment_settings.get_rRNA_bowtie_index(), self.threads,
-                                                                                                       lib_settings.get_unmappable_reads(), lib_settings.get_rRNA_unmapped_reads(), lib_settings.get_rRNA_mapping_stats(),
-                                                                                                       lib_settings.get_rRNA_mapped_reads(), lib_settings.get_log(),
-                                                                                                       ), shell=True).wait()
-        if not ms_utils.file_exists(lib_settings.get_genome_unmapped_reads()):
-            #take still unmapped sequences and map them to the rest of the yeast genome, counting mapping stats
-            subprocess.Popen('bowtie2 -f -D 20 -R 3 -N 1 -L 15 -i S,1,0.50 -x %s -p %d -U %s --un-gz %s 2>>%s | samtools view -bS - > %s 2>>%s ' % (self.experiment_settings.get_genome_bowtie_index(), self.threads,
-                                                                                               lib_settings.get_rRNA_unmapped_reads(), lib_settings.get_genome_unmapped_reads(), lib_settings.get_genome_mapping_stats(),
-                                                                                               lib_settings.get_genome_mapped_reads(), lib_settings.get_log(),
-                                                                                               ), shell=True).wait()
-
-    def write_mapping_summary(self, rRNA_file, pool_file, genome_file, output_file):
-        pool_stats = self.parse_mapping_stats(pool_file)
-        rRNA_stats = self.parse_mapping_stats(rRNA_file)
-        genome_stats = self.parse_mapping_stats(genome_file)
+    def write_mapping_summary(self, output_file):
 
         f = open(output_file, 'w')
-        f.write('\tunique_pool\tmultiple_pool\tunique_rRNA\tmultiple_rRNA\tunique_genome\tmultiple_genome\n')
-        f.write('total\t%d\t%d\t%d\t%d\t%d\t%d\n' % (pool_stats[2], pool_stats[3], rRNA_stats[2], rRNA_stats[3],
-                                                     genome_stats[2], genome_stats[3]))
+
+        f.write('sample name\ttotal reads\tpairs\tunaligned pairs\tuniquely aligned pairs\tmultiply aligned pairs\ttotal alignment %\n')
+        for lib_settings in self.experiment_settings.iter_lib_settings():
+            total_reads, paired_reads, unaligned_pairs, uniquely_aligned_pairs, multiply_aligned_pairs,\
+            overall_alignment_percent = self.parse_paired_end_mapping_stats(lib_settings.get_pool_mapping_stats())
+            f.write('%s\t%d\t%d\t%d\t%d\t%d\t%f\n' % (lib_settings.sample_name, total_reads, paired_reads, unaligned_pairs, uniquely_aligned_pairs,
+                                                      multiply_aligned_pairs, overall_alignment_percent))
+            f.write('%s percents\t%f\t%f\t%f\t%f\t%f\t%f\n' % (lib_settings.sample_name,
+                                                               100*total_reads/float(total_reads),
+                                                               100 *paired_reads/float(total_reads),
+                                                               100 *unaligned_pairs/float(total_reads),
+                                                               100 *uniquely_aligned_pairs/float(total_reads),
+                                                               100 *multiply_aligned_pairs/float(total_reads),
+                                                               100*(uniquely_aligned_pairs+multiply_aligned_pairs)/float(total_reads)))
         f.close()
 
-
-    def parse_mapping_stats(self, alignment_summary_file):
+    def parse_paired_end_mapping_stats(self, alignment_summary_file):
         '''
         example alignment summary:
-        8333978 reads; of these:
-          8333978 (100.00%) were unpaired; of these:
-            7905371 (94.86%) aligned 0 times
-            276859 (3.32%) aligned exactly 1 time
-            151748 (1.82%) aligned >1 times
-        5.14% overall alignment rate
+
+        random stuff here
+
+        100000 reads; of these:
+          100000 (100.00%) were paired; of these:
+            37476 (37.48%) aligned concordantly 0 times
+            60871 (60.87%) aligned concordantly exactly 1 time
+            1653 (1.65%) aligned concordantly >1 times
+            ----
+            37476 pairs aligned 0 times concordantly or discordantly; of these:
+              74952 mates make up the pairs; of these:
+                66796 (89.12%) aligned 0 times
+                1106 (1.48%) aligned exactly 1 time
+                7050 (9.41%) aligned >1 times
+        66.60% overall alignment rate
+
+        more stuff here
         '''
         f = open(alignment_summary_file)
-        lines = f.readlines()
-        total_reads = int(lines[0].strip().split()[0])
-        unaligned_reads = int(lines[2].strip().split()[0])
-        uniquely_aligned_reads = int(lines[3].strip().split()[0])
-        multiply_aligned_reads = int(lines[4].strip().split()[0])
-        overall_alignment_percent = float(lines[5].strip().split()[0][:-1])
+        for line in f:
+            if line.strip().endswith('reads; of these:'):
+                total_reads = int(line.strip().split()[0])
+                line=f.next()
+                paired_reads = int(line.strip().split()[0])
+                line =f.next()
+                unaligned_pairs = int(line.strip().split()[0])
+                line =f.next()
+                uniquely_aligned_pairs = int(line.strip().split()[0])
+                line =f.next()
+                multiply_aligned_pairs = int(line.strip().split()[0])
+                line =f.next()
+                line =f.next()
+                line =f.next()
+                line =f.next()
+                line =f.next()
+                line =f.next()
+                line =f.next()
+                overall_alignment_percent = float(line.strip().split()[0][:-1])
         f.close()
-        return total_reads, unaligned_reads, uniquely_aligned_reads, multiply_aligned_reads, overall_alignment_percent
+        return total_reads, paired_reads, unaligned_pairs, uniquely_aligned_pairs, multiply_aligned_pairs, overall_alignment_percent
 
 
     def get_collapsed_read_fractions(self, lib_settings):

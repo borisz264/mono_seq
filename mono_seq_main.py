@@ -32,11 +32,10 @@ class mse:
         self.threads = threads
         self.settings = settings
         self.remove_adaptor()
-        self.trim_reads()
         self.trim_reference_pool_fasta()
         self.build_bowtie_index()
         self.map_reads()
-        self.initialize_libs()
+        #self.initialize_libs()
 
     def initialize_libs(self):
         self.settings.write_to_log('initializing libraries, counting reads')
@@ -109,62 +108,15 @@ class mse:
         -o is the read1 output file
         -p is the read2 output file
         """
-        command_to_run = 'cutadapt -a %s -G %s --overlap 5 --minimum-length %d --pair-filter=both -o %s -p %s %s %s 1>>%s 2>>%s' % (
+        command_to_run = 'cutadapt -a %s -G %s --overlap 5 -u %d -U %d -q %d --trim-n --minimum-length %d --pair-filter=both -o %s -p %s %s %s 1>>%s 2>>%s' % (
             self.settings.get_property('read1_3p_adaptor_sequence'), self.settings.get_property('read2_5p_adaptor_sequence'),
-            self.settings.get_property('min_post_adaptor_length'),
+            self.settings.get_property('read1_5p_bases_to_trim'), self.settings.get_property('read2_5p_bases_to_trim'),
+            self.settings.get_property('quality_cutoff'), self.settings.get_property('min_post_adaptor_length'),
             lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_adaptor_trimmed_reads()[1],
             lib_settings.get_paired_fastq_gz_files()[0], lib_settings.get_paired_fastq_gz_files()[1],
             lib_settings.get_log(), lib_settings.get_log())
         subprocess.Popen(command_to_run, shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
-
-    def trim_reads(self):
-        """
-        Trim reads by given amount, removing potential random barcoding sequences from 5' end
-        Trimming from 3' end can also help if mapping is problematic by reducing chance for indels to prevent mapping
-        :return:
-        """
-        self.settings.write_to_log( 'trimming reads')
-        if not self.settings.get_property('force_retrim'):
-            for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.trimmed_reads_exist():
-                    break
-            else:
-                return
-        ms_utils.make_dir(self.rdir_path('trimmed_reads'))
-        ms_utils.parmap(lambda lib_setting: self.trim_one_fasta_file(lib_setting), self.settings.iter_lib_settings(), nprocs = self.threads)
-        self.settings.write_to_log( 'trimming reads complete')
-
-    def trim_one_fasta_file(self, lib_settings):
-        lib_settings.write_to_log('trimming_reads')
-        first_base_to_keep = self.settings.get_property('first_base_to_keep') #the trimmer is 1-indexed. 1 means keep every base
-        last_base_to_keep = self.settings.get_property('last_base_to_keep')
-        if self.settings.get_property('trim_adaptor'):
-            subprocess.Popen('gunzip -c %s | fastx_trimmer -f %d -l %d -z -o %s >>%s 2>>%s' % (lib_settings.get_adaptor_trimmed_reads()[0],
-                                                                                      first_base_to_keep, last_base_to_keep,
-                                                                                      lib_settings.get_trimmed_reads(),
-                                                                                      lib_settings.get_log(),
-                                                                                      lib_settings.get_log()), shell=True).wait()
-        else:
-            subprocess.Popen('gunzip -c %s | fastx_trimmer -f %d -l %d -z -o %s >>%s 2>>%s' % (lib_settings.get_collapsed_reads(),
-                                                                                      first_base_to_keep, last_base_to_keep,
-                                                                                      lib_settings.get_trimmed_reads(),
-                                                                                      lib_settings.get_log(),
-                                                                                      lib_settings.get_log()), shell=True).wait()
-        lib_settings.write_to_log('trimming_reads done')
-
-    def get_barcode_match(self, barcode, barcodes):
-        """
-        takes a barcode and returns the one it matches (hamming <= 1)
-        else
-        empty string
-        """
-        if barcode in barcodes:
-            return barcode
-        for barcode_j in barcodes:
-            if ms_utils.hamming_N(barcode, barcode_j) <= self.settings.get_property('mismatches_allowed_in_barcode'):
-                return barcode_j
-        return ''
 
     def build_bowtie_index(self):
         """
@@ -184,8 +136,8 @@ class mse:
         '''
         Trims the reference sequences to the length of the trimmed reads + a buffer
         '''
-        trim_5p = self.settings.get_property('pool_5trim') #nucleotides to cut from 5' end
-        trim_3p = self.settings.get_property('pool_3trim') #nucleotides to cut from 3' end
+        trim_5p = self.settings.get_property('pool_5p_bases_to_trim') #nucleotides to cut from 5' end
+        trim_3p = self.settings.get_property('pool_3p_bases_to_trim') #nucleotides to cut from 3' end
         f = open(self.settings.get_property('pool_fasta'))
         g = open(self.settings.get_trimmed_pool_fasta(), 'w')
         for line in f:
@@ -219,8 +171,8 @@ class mse:
 
     def map_one_library(self, lib_settings):
         lib_settings.write_to_log('mapping_reads')
-        subprocess.Popen('bowtie2 -f -D 20 -R 3 -N 1 -L 15 --norc -i S,1,0.50 -x %s -p %d -U %s --un-gz %s -S %s 1>> %s 2>>%s' % (self.settings.get_bowtie_index(), self.threads,
-                                                                                                   lib_settings.get_trimmed_reads(), lib_settings.get_unmappable_reads(), lib_settings.get_mapped_reads_sam(),
+        subprocess.Popen('bowtie2 -q --very-sensitive-local --norc --dovetail --no-discordant -u 100000 -t -x %s -p %d -1 %s -2 %s --un-conc-gz %s -S %s 1>> %s 2>>%s' % (self.settings.get_bowtie_index(), self.threads,
+                                                                                                   lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_adaptor_trimmed_reads()[1], lib_settings.get_unmappable_reads_prefix(), lib_settings.get_mapped_reads_sam(),
                                                                                                                       lib_settings.get_log(), lib_settings.get_pool_mapping_stats()), shell=True).wait()
         #subprocess.Popen('samtools view -b -h -o %s %s 1>> %s 2>> %s' % (lib_settings.get_mapped_reads(), lib_settings.get_mapped_reads_sam(), lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
         #also, sort bam file, and make an index
@@ -252,12 +204,14 @@ class mse:
 
     def perform_qc(self):
         qc_engine = ms_qc.TPS_qc(self, self.settings, self.threads)
-        if self.settings.get_property('collapse_identical_reads'):
-            qc_engine.plot_pcr_bias()
-        qc_engine.identify_contaminating_sequences()
-        qc_engine.print_library_count_concordances()
-        qc_engine.plot_average_read_positions()
-        qc_engine.plot_count_distributions()
+        qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
+
+        #if self.settings.get_property('collapse_identical_reads'):
+        #    qc_engine.plot_pcr_bias()
+        #qc_engine.identify_contaminating_sequences()
+        #qc_engine.print_library_count_concordances()
+        #qc_engine.plot_average_read_positions()
+        #qc_engine.plot_count_distributions()
 
 def parse_args():
     parser = argparse.ArgumentParser()

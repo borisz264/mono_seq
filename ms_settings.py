@@ -43,8 +43,8 @@ class ms_settings:
         - reads the settings file and converts str to float, list, etc.
         - stores result in self.settings as a dict()
         """
-        int_keys = [ 'first_base_to_keep', 'last_base_to_keep', 'minimum_reads_for_inclusion',
-                     'pool_5trim', 'pool_3trim', 'min_post_adaptor_length']
+        int_keys = [ 'read1_5p_bases_to_trim', 'read2_5p_bases_to_trim', 'minimum_reads_for_inclusion',
+                     'pool_5p_bases_to_trim', 'pool_3p_bases_to_trim', 'min_post_adaptor_length', 'quality_cutoff']
         #float_keys = []
         str_keys = ['read1_suffix', 'read2_suffix', 'read1_3p_adaptor_sequence', 'read2_5p_adaptor_sequence', 'rrna_index', 'genome_index', 'pool_append',
                     'pool_prepend']
@@ -156,6 +156,12 @@ class ms_settings:
           self.get_rdir(),
           'trimmed_pool_seqs.fasta')
         return log
+    def get_overall_mapping_summary(self):
+        summary_file = os.path.join(
+          self.get_rdir(),
+          'QC',
+          'mapping_summary.txt')
+        return summary_file
 
 class ms_lib_settings:
     def __init__(self, experiment_settings, sample_name, read1_fastq_gz_filehandle, read2_fastq_gz_filehandle):
@@ -197,33 +203,21 @@ class ms_lib_settings:
         return collapsed_reads
 
     def get_adaptor_trimmed_reads(self):
-        read1_collapsed_reads = os.path.join(
+        read1_trimmed_reads = os.path.join(
           self.experiment_settings.get_rdir(),
           'adaptor_removed',
-          '%(sample_name)s_1.fasta.gz' %
+          '%(sample_name)s_1.fastq.gz' %
            {'sample_name': self.sample_name})
-        read2_collapsed_reads = os.path.join(
+        read2_trimmed_reads = os.path.join(
           self.experiment_settings.get_rdir(),
           'adaptor_removed',
-          '%(sample_name)s_1.fasta.gz' %
+          '%(sample_name)s_2.fastq.gz' %
            {'sample_name': self.sample_name})
-        return read1_collapsed_reads, read2_collapsed_reads
+        return read1_trimmed_reads, read2_trimmed_reads
 
     def get_pool_mapping_stats(self):
         pool_mapping_stats = os.path.join(self.experiment_settings.get_rdir(), 'mapping_stats', '%(sample_name)s.pool.txt' % {'sample_name': self.sample_name})
         return pool_mapping_stats
-
-    def get_rRNA_mapping_stats(self):
-        rRNA_mapping_stats = os.path.join(self.experiment_settings.get_rdir(), 'mapping_stats', '%(sample_name)s.rRNA.txt' %{'sample_name': self.sample_name})
-        return rRNA_mapping_stats
-
-    def get_genome_mapping_stats(self):
-        rRNA_mapping_stats = os.path.join(
-          self.experiment_settings.get_rdir(),
-          'mapping_stats',
-          '%(sample_name)s.genome.txt' %
-           {'sample_name': self.sample_name})
-        return rRNA_mapping_stats
 
     def get_mapped_reads(self):
         mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s.bam' % {'sample_name': self.sample_name})
@@ -233,13 +227,26 @@ class ms_lib_settings:
         mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s.sam' % {'sample_name': self.sample_name})
         return mapped_reads
 
-    def get_unmappable_reads(self):
+    def get_unmappable_reads_prefix(self):
         unmapped_reads = os.path.join(
           self.experiment_settings.get_rdir(),
           'unmapped_reads',
-          '%(sample_name)s.unmappable.fasta.gz' %
+          '%(sample_name)s.unmappable.fastq.gz' %
            {'sample_name': self.sample_name})
         return unmapped_reads
+
+    def get_unmappable_reads(self):
+        unmapped_reads_1 = os.path.join(
+          self.experiment_settings.get_rdir(),
+          'unmapped_reads',
+          '%(sample_name)s.unmappable.fastq.1.gz' %
+           {'sample_name': self.sample_name})
+        unmapped_reads_2 = os.path.join(
+          self.experiment_settings.get_rdir(),
+          'unmapped_reads',
+          '%(sample_name)s.unmappable.fastq.1.gz' %
+           {'sample_name': self.sample_name})
+        return unmapped_reads_1, unmapped_reads_2
 
     def get_rRNA_mapped_reads(self):
         mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s_rRNA.bam' % {'sample_name': self.sample_name})
