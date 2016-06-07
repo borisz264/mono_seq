@@ -248,22 +248,6 @@ class ms_lib_settings:
            {'sample_name': self.sample_name})
         return unmapped_reads_1, unmapped_reads_2
 
-    def get_rRNA_mapped_reads(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s_rRNA.bam' % {'sample_name': self.sample_name})
-        return mapped_reads
-
-    def get_rRNA_unmapped_reads(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'unmapped_reads', '%(sample_name)s_rRNA.unmapped.fasta.gz' % {'sample_name': self.sample_name})
-        return mapped_reads
-
-    def get_genome_mapped_reads(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s_genome.bam' % {'sample_name': self.sample_name})
-        return mapped_reads
-
-    def get_genome_unmapped_reads(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'unmapped_reads', '%(sample_name)s_genome.unmapped.fasta.gz' % {'sample_name': self.sample_name})
-        return mapped_reads
-
 
     def get_trimmed_reads(self):
         trimmed_reads = os.path.join(

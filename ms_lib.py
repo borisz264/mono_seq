@@ -10,9 +10,9 @@ import numpy as np
 from collections import Counter
 
 import pysam
-import bzUtils
+import ms_utils
 
-class TPS_Lib:
+class ms_Lib:
     def __init__(self, experiment_settings, lib_settings):
         """
         Constructor for Library class
@@ -30,9 +30,10 @@ class TPS_Lib:
     def initialize_pool_sequence_mappings(self, mapq_cutoff = 30):
         if self.get_property('force_recount') or not self.lib_settings.sequence_counts_exist():
             gene_names = []
-            trimmed_sequences = bzUtils.convertFastaToDict(self.experiment_settings.get_trimmed_pool_fasta())
+            trimmed_sequences = ms_utils.convertFastaToDict(self.experiment_settings.get_trimmed_pool_fasta())
             for sequence_name in trimmed_sequences:
-                gene_name = sequence_name.split('_')[0] #TL names are assumed to be of type:YLR350W_-68_651_116
+                gene_name = sequence_name.split('_')[0] #Sequence names are assumed to be of type <gene_name>_TL_description.
+                                                        # For example: YDL112W_-41_WT or YDL112W_-41_mut_24-32
                 gene_names.append(gene_name)
                 self.pool_sequence_mappings[sequence_name] = pool_sequence_mapping(sequence_name, trimmed_sequences[sequence_name])
             samfile = pysam.Samfile(self.lib_settings.get_mapped_reads(), "rb" )
@@ -48,7 +49,7 @@ class TPS_Lib:
                 else:
                     assert gene_counts[mapping_name.split('_')[0]] != 0
                     self.pool_sequence_mappings[mapping_name].is_only_tl = False
-            bzUtils.makePickle(self.pool_sequence_mappings, self.lib_settings.get_sequence_counts())
+            ms_utils.makePickle(self.pool_sequence_mappings, self.lib_settings.get_sequence_counts())
         else:
             self.pool_sequence_mappings = bzUtils.unPickle(self.lib_settings.get_sequence_counts())
 

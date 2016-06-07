@@ -11,7 +11,6 @@ import itertools
 import pysam
 import math
 import gzip
-import bzUtils
 
 class TPS_qc:
     def __init__(self, tpse, experiment_settings, threads):
@@ -26,59 +25,30 @@ class TPS_qc:
         self.get_wdir = experiment_settings.get_wdir
         ms_utils.make_dir(self.tpse.rdir_path('QC'))
 
-
-    def plot_pcr_bias(self):
-        ms_utils.make_dir(os.path.join(
-          self.experiment_settings.get_rdir(),
-          'QC','collapsed_fracs'))
-        collapsed_read_fractions = map(lambda lib_settings: self.get_collapsed_read_fractions(lib_settings),
-                                                  self.experiment_settings.iter_lib_settings())
-        fig = plt.figure(figsize=(8,8))
-        plot = fig.add_subplot(111)
-        color_index = 0
-        for col_tuple in collapsed_read_fractions:
-            sample_name, read_fractions = col_tuple
-            read_fractions = sorted(read_fractions, reverse = True)
-            cumulative_read_fractions = read_fractions[:1]
-            for read_frac in read_fractions[1:]:
-                cumulative_read_fractions.append(cumulative_read_fractions[-1]+read_frac)
-            cumulative_seq_fractions = np.array(range(1, len(cumulative_read_fractions)+1))/float(len(cumulative_read_fractions))
-
-            plot.plot(cumulative_read_fractions, cumulative_seq_fractions,color=bzUtils.rainbow[color_index/2],
-                      linestyle = bzUtils.line_styles[color_index%2], label=sample_name, lw=1)
-            color_index +=1
-        plot.plot(cumulative_seq_fractions, cumulative_seq_fractions,color=bzUtils.rainbow[color_index/2],
-              linestyle = bzUtils.line_styles[2], label='expected', lw=1)
-        plot.set_xlabel("fraction of reads")
-        plot.set_ylabel("fraction of sequences")
-        plot.set_xlim(0,1)
-        plot.set_ylim(0,1)
-        lg=plt.legend(loc=2,prop={'size':10}, labelspacing=0.2)
-        lg.draw_frame(False)
-        out_name =  os.path.join(
-          self.experiment_settings.get_rdir(),
-          'QC',
-          'pcr_bias.pdf')
-        plt.savefig(out_name, transparent='True', format='pdf')
-        plt.clf()
-
     def write_mapping_summary(self, output_file):
 
         f = open(output_file, 'w')
 
-        f.write('sample name\ttotal reads\tpairs\tunaligned pairs\tuniquely aligned pairs\tmultiply aligned pairs\ttotal alignment %\n')
+        f.write('sample name\ttotal reads\tread1 adaptors\tread2 adaptors\ttoo short\tpass trimming filter\tmapping input\tunaligned pairs\tuniquely aligned pairs\tmultiply aligned pairs\ttotal alignment %\n')
         for lib_settings in self.experiment_settings.iter_lib_settings():
-            total_reads, paired_reads, unaligned_pairs, uniquely_aligned_pairs, multiply_aligned_pairs,\
+            mapping_input, paired_reads, unaligned_pairs, uniquely_aligned_pairs, multiply_aligned_pairs,\
             overall_alignment_percent = self.parse_paired_end_mapping_stats(lib_settings.get_pool_mapping_stats())
-            f.write('%s\t%d\t%d\t%d\t%d\t%d\t%f\n' % (lib_settings.sample_name, total_reads, paired_reads, unaligned_pairs, uniquely_aligned_pairs,
+            total_reads, read1_adaptors, read2_adaptors, too_short, passing_filter = self.get_adaptor_trimming_stats(lib_settings.get_log())
+            f.write('%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%f\n' % (lib_settings.sample_name, total_reads, read1_adaptors,
+                                                      read2_adaptors, too_short, passing_filter, mapping_input,
+                                                      unaligned_pairs, uniquely_aligned_pairs,
                                                       multiply_aligned_pairs, overall_alignment_percent))
-            f.write('%s percents\t%f\t%f\t%f\t%f\t%f\t%f\n' % (lib_settings.sample_name,
-                                                               100*total_reads/float(total_reads),
-                                                               100 *paired_reads/float(total_reads),
-                                                               100 *unaligned_pairs/float(total_reads),
-                                                               100 *uniquely_aligned_pairs/float(total_reads),
-                                                               100 *multiply_aligned_pairs/float(total_reads),
-                                                               100*(uniquely_aligned_pairs+multiply_aligned_pairs)/float(total_reads)))
+            f.write('%s percents\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n' % (lib_settings.sample_name,
+                                                                               100*total_reads/float(total_reads),
+                                                                               100*read1_adaptors/float(total_reads),
+                                                                               100*read2_adaptors/float(total_reads),
+                                                                               100*too_short/float(total_reads),
+                                                                               100*passing_filter/float(total_reads),
+                                                                               100*mapping_input/float(total_reads),
+                                                                               100*unaligned_pairs/float(total_reads),
+                                                                               100*uniquely_aligned_pairs/float(total_reads),
+                                                                               100*multiply_aligned_pairs/float(total_reads),
+                                                                               100*(uniquely_aligned_pairs+multiply_aligned_pairs)/float(total_reads)))
         f.close()
 
     def parse_paired_end_mapping_stats(self, alignment_summary_file):
@@ -124,6 +94,93 @@ class TPS_qc:
                 overall_alignment_percent = float(line.strip().split()[0][:-1])
         f.close()
         return total_reads, paired_reads, unaligned_pairs, uniquely_aligned_pairs, multiply_aligned_pairs, overall_alignment_percent
+
+    def get_adaptor_trimming_stats(self, log_file):
+        '''
+        example:
+        This is cutadapt 1.10 with Python 2.7.10
+        Command line parameters: -a GCTGCACGGTGACGTCTCNNNTGGAATTCTCGGGTGCCAAGGAACTCCAGTCAC --overlap 5 -u 7 -U 21 -q 10 --trim-n --minimum-length 30 --pair-filter=both -o /Users/boris/Gilbert_Lab/Book_4/4.146/80S_seq_pilot_pe/adaptor_removed/80S_1_1.fastq.gz -p /Users/boris/Gilbert_Lab/Book_4/4.146/80S_seq_pilot_pe/adaptor_removed/80S_1_2.fastq.gz /Users/boris/Gilbert_Lab/Book_4/4.146/truncated_pe_data/160519Gil_D16-4658_1_sequence.fastq.gz /Users/boris/Gilbert_Lab/Book_4/4.146/truncated_pe_data/160519Gil_D16-4658_2_sequence.fastq.gz
+        Trimming 1 adapter with at most 10.0% errors in paired-end mode ...
+        Finished in 10.02 s (40 us/read; 1.50 M reads/minute).
+
+        === Summary ===
+
+        Total read pairs processed:            250,000
+          Read 1 with adapter:                  60,994 (24.4%)
+          Read 2 with adapter:                       0 (0.0%)
+        Pairs that were too short:              60,994 (24.4%)
+        Pairs written (passing filters):       189,006 (75.6%)
+
+        Total basepairs processed:    20,000,000 bp
+          Read 1:    10,000,000 bp
+          Read 2:    10,000,000 bp
+        Quality-trimmed:                   3,840 bp (0.0%)
+          Read 1:             7 bp
+          Read 2:         3,833 bp
+        Total written (filtered):      9,825,137 bp (49.1%)
+          Read 1:     6,237,184 bp
+          Read 2:     3,587,953 bp
+
+        === First read: Adapter 1 ===
+
+        Sequence: GCTGCACGGTGACGTCTCNNNTGGAATTCTCGGGTGCCAAGGAACTCCAGTCAC; Type: regular 3'; Length: 54; Trimmed: 60994 times.
+
+        No. of allowed errors:
+        0-9 bp: 0; 10-19 bp: 1; 20-29 bp: 2; 30-39 bp: 3; 40-49 bp: 4; 50-54 bp: 5
+
+        Bases preceding removed adapters:
+          A: 0.1%
+          C: 0.2%
+          G: 0.1%
+          T: 0.2%
+          none/other: 99.3%
+
+        Overview of removed sequences
+        length	count	expect	max.err	error counts
+        5	21	244.1	0	21
+        6	6	61.0	0	6
+        7	18	15.3	0	18
+        8	10	3.8	0	10
+        9	11	1.0	0	11
+        10	5	0.2	1	5
+        11	8	0.1	1	7 1
+        12	12	0.0	1	12
+        13	8	0.0	1	8
+        14	9	0.0	1	9
+        15	9	0.0	1	8 1
+        16	6	0.0	1	6
+        17	9	0.0	1	8 1
+        18	11	0.0	1	9 1 1
+        19	13	0.0	1	13
+        20	7	0.0	2	7
+        21	15	0.0	2	14 0 1
+        22	19	0.0	2	16 3
+        23	10	0.0	2	8 1 1
+        24	18	0.0	2	15 2 1
+        25	23	0.0	2	18 2 3
+        26	23	0.0	2	22 1
+        27	32	0.0	2	29 3
+        28	14	0.0	2	14
+        29	21	0.0	2	20 1
+        30	14	0.0	3	9 3 2
+        31	31	0.0	3	12 1 16 2
+        32	23	0.0	3	21 1 1
+        33	60588	0.0	3	102 52134 7310 1042
+        '''
+        f = open(log_file)
+        for line in f:
+            if line.strip().startswith('Total read pairs processed:'):
+                total_reads = int(line.strip().split()[-1].replace(',', ''))
+                line = f.next()
+                read1_adaptors = int(line.strip().split()[-2].replace(',', ''))
+                line = f.next()
+                read2_adaptors = int(line.strip().split()[-2].replace(',', ''))
+                line = f.next()
+                too_short = int(line.strip().split()[-2].replace(',', ''))
+                line = f.next()
+                passing_filter = int(line.strip().split()[-2].replace(',', ''))
+        f.close()
+        return total_reads, read1_adaptors, read2_adaptors, too_short, passing_filter
 
 
     def get_collapsed_read_fractions(self, lib_settings):

@@ -46,7 +46,7 @@ class mse:
 
 
     def initialize_lib(self, lib_settings):
-        lib = ms_lib.TPS_Lib(self.settings, lib_settings)
+        lib = ms_lib.ms_Lib(self.settings, lib_settings)
         self.libs.append(lib)
 
     def needs_calculation(self, lib_settings, count_type, k):
@@ -108,13 +108,22 @@ class mse:
         -o is the read1 output file
         -p is the read2 output file
         """
-        command_to_run = 'cutadapt -a %s -G %s --overlap 5 -u %d -U %d -q %d --trim-n --minimum-length %d --pair-filter=both -o %s -p %s %s %s 1>>%s 2>>%s' % (
-            self.settings.get_property('read1_3p_adaptor_sequence'), self.settings.get_property('read2_5p_adaptor_sequence'),
-            self.settings.get_property('read1_5p_bases_to_trim'), self.settings.get_property('read2_5p_bases_to_trim'),
-            self.settings.get_property('quality_cutoff'), self.settings.get_property('min_post_adaptor_length'),
-            lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_adaptor_trimmed_reads()[1],
-            lib_settings.get_paired_fastq_gz_files()[0], lib_settings.get_paired_fastq_gz_files()[1],
-            lib_settings.get_log(), lib_settings.get_log())
+        if not self.settings.get_property('read2_5p_adaptor_sequence').strip()=='':
+            command_to_run = 'cutadapt -a %s -G %s --overlap 5 -u %d -U %d -q %d --trim-n --minimum-length %d --pair-filter=both -o %s -p %s %s %s 1>>%s 2>>%s' % (
+                self.settings.get_property('read1_3p_adaptor_sequence'), self.settings.get_property('read2_5p_adaptor_sequence'),
+                self.settings.get_property('read1_5p_bases_to_trim'), self.settings.get_property('read2_5p_bases_to_trim'),
+                self.settings.get_property('quality_cutoff'), self.settings.get_property('min_post_adaptor_length'),
+                lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_adaptor_trimmed_reads()[1],
+                lib_settings.get_paired_fastq_gz_files()[0], lib_settings.get_paired_fastq_gz_files()[1],
+                lib_settings.get_log(), lib_settings.get_log())
+        else:
+            command_to_run = 'cutadapt -a %s --overlap 5 -u %d -U %d -q %d --trim-n --minimum-length %d --pair-filter=both -o %s -p %s %s %s 1>>%s 2>>%s' % (
+                self.settings.get_property('read1_3p_adaptor_sequence'),
+                self.settings.get_property('read1_5p_bases_to_trim'), self.settings.get_property('read2_5p_bases_to_trim'),
+                self.settings.get_property('quality_cutoff'), self.settings.get_property('min_post_adaptor_length'),
+                lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_adaptor_trimmed_reads()[1],
+                lib_settings.get_paired_fastq_gz_files()[0], lib_settings.get_paired_fastq_gz_files()[1],
+                lib_settings.get_log(), lib_settings.get_log())
         subprocess.Popen(command_to_run, shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
 
@@ -171,7 +180,7 @@ class mse:
 
     def map_one_library(self, lib_settings):
         lib_settings.write_to_log('mapping_reads')
-        subprocess.Popen('bowtie2 -q --very-sensitive-local --norc --dovetail --no-discordant -u 100000 -t -x %s -p %d -1 %s -2 %s --un-conc-gz %s -S %s 1>> %s 2>>%s' % (self.settings.get_bowtie_index(), self.threads,
+        subprocess.Popen('bowtie2 -q --very-sensitive-local --norc --no-mixed --dovetail --no-discordant -t -x %s -p %d -1 %s -2 %s --un-conc-gz %s -S %s 1>> %s 2>>%s' % (self.settings.get_bowtie_index(), self.threads,
                                                                                                    lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_adaptor_trimmed_reads()[1], lib_settings.get_unmappable_reads_prefix(), lib_settings.get_mapped_reads_sam(),
                                                                                                                       lib_settings.get_log(), lib_settings.get_pool_mapping_stats()), shell=True).wait()
         #subprocess.Popen('samtools view -b -h -o %s %s 1>> %s 2>> %s' % (lib_settings.get_mapped_reads(), lib_settings.get_mapped_reads_sam(), lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
@@ -250,6 +259,7 @@ def main():
         settings.write_to_log('performing QC')
         ms_experiment.perform_qc()
         settings.write_to_log('done performing QC')
+    '''
     if args.make_tables or args.all_tasks:
         print 'tables'
         settings.write_to_log('making tables')
@@ -264,5 +274,6 @@ def main():
     if args.comparisons or args.all_tasks:
         settings.write_to_log('doing comparisons')
         ms_experiment.compare_all_other_experiments()
+    '''
 
 main()
