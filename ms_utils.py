@@ -56,6 +56,11 @@ def parmap(f, X, nprocs = multiprocessing.cpu_count()):
     [p.join() for p in proc]
     return [x for i,x in sorted(res)]
 
+##########
+#FILE HANDLING
+##########
+
+
 def unPickle(fileName):
     #returns the pickled object stored in a pickle file
     f = open(fileName, 'r')
@@ -78,6 +83,20 @@ def make_dir(dirname):
             os.makedirs(dirname)
         except:
             print 'The directory was made by another thread extremely recently.'
+
+def file_exists(fname):
+    """
+    makes sure a given file exists
+    """
+    if not os.path.exists(fname):
+        return False
+    fstats = os.stat(fname)
+    if not fstats[6]:
+        return False
+    if not os.access(fname, os.R_OK):
+        raise ValueError('Input File %s cannot be read' % fname)
+    return True
+
 
 ##########
 #MATH
@@ -136,25 +155,23 @@ def ranges_overlap(min1, max1, min2, max2):
         return True
     return False
 
-def file_exists(fname):
-    """
-    makes sure a given file exists
-    """
-    if not os.path.exists(fname):
-        return False
-    fstats = os.stat(fname)
-    if not fstats[6]:
-        return False
-    if not os.access(fname, os.R_OK):
-        raise ValueError('Input File %s cannot be read' % fname)
-    return True
+def number_passing_cutoff(numbers, cutoff):
+    i = 0
+    for number in numbers:
+        if number >= cutoff:
+            i += 1
+    return i
 
+def significantly_enriched(xs, zthresh=2., scale='linear'):
+    assert scale in ['linear', 'log']
+    if scale =='log':
+        xs = np.log2(xs)
+    xs = stats.zscore(xs)
+    return [x > zthresh for x in xs]
 
-def getBinIndex_soft_upper(v, bins):
-    for i in range(len(bins) - 1):
-        if v > bins[i] and v <= bins[i + 1]:
-            return i
-    return -1
+##################
+#SEQUENCE HANDLING
+##################
 
 
 def get_barcode(line):
@@ -165,19 +182,6 @@ def get_barcode(line):
     """
     return line.split('#')[-1].split('/')[0]
 
-
-def get_index_from_kmer(kmer):
-    """
-    returns the base10 version of the base 4 DNA representation
-    """
-    index = 0
-    base2face = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
-    for i, base in enumerate(kmer):
-        if not base in 'ACGT':
-            return -1
-        power = len(kmer) - 1 - i
-        index += base2face[base] * (4 ** power)
-    return index
 
 def convertFastaToDict(fastaFile):
     '''
@@ -200,37 +204,6 @@ def convertFastaToDict(fastaFile):
     seqDict[currentName] = currentSequence.upper()
     return seqDict
 
-def get_kmer_from_index(kmax, index):
-    """
-    takes a number (essentially base 4)
-    and returns the kmer it corresponds to in alphabetical order
-    eg.
-    AAAA = 0*1
-    CA = 4*4 + 0*1
-    GC = 3*4 + 1 * 1
-    """
-    bases = 'ACGT'
-    out = ''
-    for k in range(kmax - 1, -1, -1):
-        face, index = divmod(index, 4 ** k)
-        out += bases[face]
-    return out
-
-
-def yield_kmers(k):
-    """
-    An iterater to all kmers of length k in alphabetical order
-    """
-    bases = 'ACGT'
-    for kmer in itertools.product(bases, repeat=k):
-        yield ''.join(kmer)
-
-
-def aopen(file, mode='r'):
-    if file[-3:] == '.gz':
-        return gzip.open(file, mode + 'b')
-    else:
-        return open(file, mode)
 
 
 def hamming_N(str1, str2):
@@ -248,6 +221,14 @@ def hamming_distance(str1, str2):
     ne = operator.ne
     return sum(itertools.imap(ne, str1, str2))
 
+def revComp(seq, isRNA = False):
+    seq = seq.upper()
+    compDict = {'A':'T', 'T':'A', 'U':'A', 'C':'G', 'G':'C', 'N':'N', '-':'-', '.':'.', '*':'*'}
+    revComp = ''.join([compDict[c] for c in seq[::-1]])
+    if isRNA:
+        return revComp.replace('T', 'U')
+    return revComp
+
 
 def close_float_value(a, b, max_percent=1.0):
     if a == 0 and b == 0:
@@ -257,14 +238,6 @@ def close_float_value(a, b, max_percent=1.0):
     ratio = float(max(a, b)) / float(min(a, b))
     percent_increase = (ratio - 1.0) * 100.0
     return percent_increase < max_percent
-
-
-def significantly_enriched(xs, zthresh=2., scale='linear'):
-    assert scale in ['linear', 'log']
-    if scale =='log':
-        xs = np.log2(xs)
-    xs = stats.zscore(xs)
-    return [x > zthresh for x in xs]
 
 def getAllMismatchedSeqs(kmer, mismatchPositions):
     nucs = ['A', 'C', 'G', 'T']
@@ -342,13 +315,7 @@ def getPaddedMismatchedAdjacentKmers(kmerSequence, padding, numMismatches):
     return kmer_list
 
 
-def revComp(seq, isRNA = False):
-    seq = seq.upper()
-    compDict = {'A':'T', 'T':'A', 'U':'A', 'C':'G', 'G':'C', 'N':'N', '-':'-', '.':'.', '*':'*'}
-    revComp = ''.join([compDict[c] for c in seq[::-1]])
-    if isRNA:
-        return revComp.replace('T', 'U')
-    return revComp
+
 
 
 

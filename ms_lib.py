@@ -1,13 +1,5 @@
 from collections import defaultdict
-import matplotlib.pyplot as plt
 import re
-import scipy.stats
-import subprocess
-import os
-import cPickle
-import ms_utils
-import numpy as np
-from collections import Counter
 
 import pysam
 import ms_utils
@@ -16,6 +8,7 @@ import ms_utils
 def initialize_pool_sequence_mappings(experiment_settings, lib_settings):
     lib_settings.write_to_log('counting reads or loading counts')
     if experiment_settings.get_property('force_recount') or not lib_settings.sequence_counts_exist():
+        print "counting BAM reads"
         pool_sequence_mappings = {}
         gene_names = []
         trimmed_sequences = ms_utils.convertFastaToDict(experiment_settings.get_trimmed_pool_fasta())
@@ -40,6 +33,7 @@ class ms_Lib:
         self.get_property = self.experiment_settings.get_property
         self.get_rdir = experiment_settings.get_rdir
         self.get_wdir = experiment_settings.get_wdir
+        print "unpickling %s counts" % lib_settings.sample_name
         self.pool_sequence_mappings = ms_utils.unPickle(self.lib_settings.get_sequence_counts())
         self.enrichment_sorted_mappings = None
 
@@ -76,38 +70,9 @@ class ms_Lib:
             return self.pool_sequence_mappings[sequence_name]
         else:
             return None
-    def get_conc(self):
-        return self.lib_settings.get_conc()
-
-    def get_washes(self):
-        return self.lib_settings.washes
-
-    def get_poly_ic(self):
-        return self.lib_settings.poly_ic_conc
-
-    def get_temperature(self):
-        return self.lib_settings.temperature
-
-    def get_rna_conc(self):
-        return self.lib_settings.input_rna
 
     def get_sample_name(self):
         return self.lib_settings.sample_name
-
-    def plot_pcr_bias(self):
-        collapsed_reads_file = self.lib_settings.get_collapsed_reads()
-        read_counts = np.array()
-        f = open(collapsed_reads_file)
-        for line in f:
-            if not line.strip() == '' and not line.startswith('#'):#ignore empty lines and commented out lines
-                if line.startswith('>'):#> marks the start of a new sequence
-                    num_reads = int(line[1:].strip().split('-')[1])
-                    read_counts.append(num_reads)
-                else:
-                    continue
-        f.close()
-        read_fractions = read_counts/float(sum(read_counts))
-        read_fractions
 
     def get_counts(self, sequence_name):
         return self.pool_sequence_mappings[sequence_name].total_passing_reads
@@ -122,6 +87,15 @@ class ms_Lib:
             return set([passing_mapping.sequence_name for passing_mapping in passing_mappings])
         else:
             return passing_mappings
+
+    def get_all_fragment_lengths(self):
+        all_lengths = []
+        for pool_sequence_mapping in self.pool_sequence_mappings.values():
+            all_lengths = all_lengths + pool_sequence_mapping.fragment_lengths
+        return all_lengths
+
+    def get_fragment_count_distribution(self):
+        return [self.pool_sequence_mappings[sequence].fragment_count for sequence in self.pool_sequence_mappings]
 
 
 class pool_sequence_mapping:
@@ -139,7 +113,6 @@ class pool_sequence_mapping:
     def __init__(self, sequence_name, full_sequence, sam_file):
         self.sequence_name = sequence_name
         self.full_sequence = full_sequence
-        self.total_passing_reads = 0
         self.fragment_5p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_3p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_lengths_at_position = defaultdict(list)  # will map position to a list of fragment lengths with 5' ends at that position
@@ -147,6 +120,7 @@ class pool_sequence_mapping:
         self.paired_end_mapping_tags = defaultdict(int)
         self.assign_read_ends_from_sam(sam_file)
         self.fragment_count = len(self.fragment_lengths)
+        self.length_dist = defaultdict(int)
 
     def assign_read_ends_from_sam(self, sam_file):
         all_mapping_reads = sam_file.fetch(reference = self.sequence_name)

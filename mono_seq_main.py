@@ -6,19 +6,11 @@ __author__ = 'boris zinshteyn'
 Intended for processing of 80s monosome-seq data from defined RNA pools
 Based on Alex Robertson's original RBNS pipeline, available on github
 """
-import sys
-import matplotlib
 import matplotlib.pyplot as plt
 plt.rcParams['pdf.fonttype'] = 42 #leaves most text as actual text in PDFs, not outlines
 import os
 import argparse
-import itertools
-import collections
-from collections import defaultdict
-import gzip
 import subprocess
-import numpy
-import scipy.stats as stats
 
 import ms_settings
 import ms_utils
@@ -215,14 +207,11 @@ class mse:
 
     def perform_qc(self):
         qc_engine = ms_qc.ms_qc(self, self.settings, self.threads)
-        qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
-
-        #if self.settings.get_property('collapse_identical_reads'):
-        #    qc_engine.plot_pcr_bias()
-        #qc_engine.identify_contaminating_sequences()
-        qc_engine.print_library_count_concordances()
+        #qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
+        #qc_engine.print_library_count_concordances()
         #qc_engine.plot_average_read_positions()
-        #qc_engine.plot_count_distributions()
+        #qc_engine.plot_fragment_length_distributions()
+        qc_engine.plot_count_distributions()
 
 def parse_args():
     parser = argparse.ArgumentParser()

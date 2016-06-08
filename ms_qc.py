@@ -1,14 +1,14 @@
 from collections import defaultdict
 import matplotlib.pyplot as plt
+
+import uniform_colormaps
+
 plt.rcParams['pdf.fonttype'] = 42
 import scipy.stats as stats
-import subprocess
 import os
-import cPickle
 import ms_utils
 import numpy as np
 import itertools
-import pysam
 import math
 import gzip
 
@@ -221,9 +221,6 @@ class ms_qc:
         pearsonR, pearsonP = stats.pearsonr(lib1_counts, lib2_counts)
         return pearsonR, spearmanR, pearsonP, spearmanP
 
-    def get_library_count_distribution(self, lib):
-        return [lib.pool_sequence_mappings[sequence].total_passing_reads for sequence in lib.pool_sequence_mappings]
-
     def print_library_count_concordances(self):
         out_name =  os.path.join(self.experiment_settings.get_rdir(), 'QC',
           'count_concordances.txt')
@@ -244,19 +241,52 @@ class ms_qc:
 
     def plot_average_read_positions_one_lib(self, lib, min_x = 0, max_x = 150):
         positions = np.array(range(min_x, max_x+1))
-        averages = [np.average([pool_sequence_mapping.fraction_at_position(position) for pool_sequence_mapping in lib.pool_sequence_mappings.values() if pool_sequence_mapping.total_passing_reads>0]) for position in positions]
-
+        counts5p = np.array([sum([pool_sequence_mapping.fragment_5p_ends_at_position[position] for pool_sequence_mapping
+                         in lib.pool_sequence_mappings.values()]) for position in positions])
+        counts3p = np.array([sum([pool_sequence_mapping.fragment_3p_ends_at_position[position] for pool_sequence_mapping
+                         in lib.pool_sequence_mappings.values()]) for position in positions])
+        assert sum(counts3p) == sum(counts3p)
+        averages5p = counts5p/float(sum(counts5p))
+        averages3p = counts3p/float(sum(counts3p))
         fig = plt.figure(figsize=(8,8))
         plot = fig.add_subplot(111)
-        plot.bar(positions , averages,color=ms_utils.rainbow[0], lw=0)
+        plot.bar(positions, averages5p,color=ms_utils.rainbow[0], lw=0, label = "5' end")
+        plot.bar(positions, averages3p, color=ms_utils.rainbow[1], lw=0, label = "3' end")
         plot.set_xticks(positions[::10]+0.5)
         plot.set_xticklabels(positions[::10])
-        plot.set_xlabel("position of read 5' end from RNA end")
+        lg = plt.legend(loc=2, prop={'size': 6}, labelspacing=0.2)
+        lg.draw_frame(False)
+        plot.set_xlabel("position of fragment end from RNA 5' end")
         plot.set_ylabel("average read fraction")
+        plot.set_ylim(0, 1)
         out_name =  os.path.join(
           self.experiment_settings.get_rdir(),
           'QC',
           '%(sample_name)s.read_positions.pdf' % {'sample_name': lib.get_sample_name ()})
+        plt.savefig(out_name, transparent='True', format='pdf')
+        plt.clf()
+
+    def plot_fragment_length_distributions(self):
+        fig = plt.figure(figsize=(16, 16))
+        plot = fig.add_subplot(111)
+        colormap = uniform_colormaps.viridis
+        color_index = 0
+        for lib in self.mse.libs:
+            sample_name = lib.lib_settings.sample_name
+            fragment_lengths = lib.get_all_fragment_lengths()
+            # note that all but the last bin exclude the right (larger) edge of the bin. So I add an extra bin.
+            hist, bin_edges = np.histogram(fragment_lengths, bins = range(0, max(fragment_lengths)+1), normed = True)
+            plot.plot(bin_edges[:-1], hist, color=colormap((color_index-1)/float(len(self.mse.libs))), lw=2, label = sample_name)
+            color_index += 1
+            plot.set_xlabel("fragment length", fontsize=10)
+            plot.set_ylabel("fraction of fragments", fontsize=10)
+            #plot.set_ylim(0,0.5)
+        lg = plt.legend(loc=2, prop={'size': 6}, labelspacing=0.2)
+        lg.draw_frame(False)
+        out_name = os.path.join(
+            self.experiment_settings.get_rdir(),
+            'QC',
+            'fragment_length_distributions.pdf')
         plt.savefig(out_name, transparent='True', format='pdf')
         plt.clf()
 
@@ -266,17 +296,18 @@ class ms_qc:
         fig = plt.figure(figsize=(16,16))
         plot_index = 1
         cutoff = 100
-        hbins = np.arange(0, 400, 10)
-        hbins = np.append(hbins, 10000000)
+        log_bins = [0]+[10**x for x in range(8)]
+        #hbins = np.arange(0, 4000, 10)
+        #hbins = np.append(hbins, 10000000)
         for lib in self.mse.libs:
-            plot = fig.add_subplot(math.sqrt(bzUtils.next_square_number(num_libs)), math.sqrt(bzUtils.next_square_number(num_libs)), plot_index)
+            plot = fig.add_subplot(math.sqrt(ms_utils.next_square_number(num_libs)), math.sqrt(ms_utils.next_square_number(num_libs)), plot_index)
             sample_name = lib.lib_settings.sample_name
-            dist = self.get_library_count_distribution(lib)
-            plot.hist(dist, bins = hbins, color=bzUtils.skyBlue, histtype='stepfilled', edgecolor = None, lw = 0)
+            dist = lib.get_fragment_count_distribution()
+            plot.hist(dist, bins = log_bins, color=ms_utils.skyBlue, histtype='stepfilled', edgecolor = None, lw = 0)
             plot.set_xlabel("# reads", fontsize = 10)
-            plot.set_ylabel("# genes (%d have >= %d reads)" % (bzUtils.number_passing_cutoff(dist, cutoff), cutoff), fontsize = 10)
-            plot.set_xlim(0, 400)
-            #plot.set_ylim(0,1)
+            plot.set_ylabel("# genes (%d/%d have >= %d reads)" % (ms_utils.number_passing_cutoff(dist, cutoff), len(dist), cutoff), fontsize = 10)
+            plot.set_xlim(0, 10**8.1)
+            plot.set_xscale('symlog', linthreshx=1)
             plot.axvline(cutoff, ls = 'dashed')
             plot.set_title(sample_name, fontsize = 8)
             plot_index += 1
@@ -284,36 +315,6 @@ class ms_qc:
         out_name =  os.path.join(
           self.experiment_settings.get_rdir(),
           'QC',
-          'count_distributions.pdf')
+          'tl_count_distributions.pdf')
         plt.savefig(out_name, transparent='True', format='pdf')
         plt.clf()
-
-        """
-        def plot_insert_size_distributions(self):
-            #plot distribution of insert sizes from cutadapt output
-            TODO - need to parse log file to get this info
-            num_libs = len(self.tpse.libs)
-            fig = plt.figure(figsize=(16,16))
-            plot_index = 1
-            cutoff = 100
-            hbins = np.arange(0, 51, 1)
-            for lib in self.tpse.libs:
-                plot = fig.add_subplot(math.sqrt(bzUtils.next_square_number(num_libs)), math.sqrt(bzUtils.next_square_number(num_libs)), plot_index)
-                sample_name = lib.lib_settings.sample_name
-                dist = self.get_insert_sizes(lib)
-                plot.hist(dist, bins = hbins, color=bzUtils.skyBlue, histtype='stepfilled', edgecolor = None, lw = 0)
-                plot.set_xlabel("insert size", fontsize = 10)
-                plot.set_ylabel("fraction of reads" % (bzUtils.number_passing_cutoff(dist, cutoff), cutoff), fontsize = 10)
-                plot.set_xlim(0, 400)
-                #plot.set_ylim(0,1)
-                plot.axvline(cutoff, ls = 'dashed')
-                plot.set_title(sample_name, fontsize = 8)
-                plot_index += 1
-            plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.15, wspace=0.4, hspace=0.6)
-            out_name =  os.path.join(
-              self.experiment_settings.get_rdir(),
-              'QC',
-              'insetrt_size_distributions.pdf')
-            plt.savefig(out_name, transparent='True', format='pdf')
-            plt.clf()
-        """
