@@ -209,10 +209,31 @@ class mse:
         qc_engine = ms_qc.ms_qc(self, self.settings, self.threads)
         #qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
         #qc_engine.print_library_count_concordances()
-        #qc_engine.plot_average_read_positions()
-        #qc_engine.plot_fragment_length_distributions()
+        qc_engine.plot_average_read_positions()
+        qc_engine.plot_fragment_length_distributions()
         qc_engine.plot_count_distributions()
 
+    def make_counts_table(self, fractional=False):
+        """
+        write out number of fragments mapping to each TL in each dataset
+        :param fractional: if True, replace raw counts with library fraction
+        :return:
+        """
+        #TODO - finish this method!
+        if fractional:
+            summary_file = os.path.join(
+                self.get_rdir(),
+                'tables',
+                'fractional_counts.txt')
+        else:
+            summary_file = os.path.join(
+                self.get_rdir(),
+                'tables',
+                'raw_counts.txt')
+
+        header = ['sequence name\t'] + '\t'.join([lib.settings.sample_name for lib in self.libs]) + ['\n']
+        for sequence_name in self.libs[0].pool_sequence_mappings:
+            pass
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("settings_file")

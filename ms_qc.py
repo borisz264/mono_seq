@@ -254,10 +254,11 @@ class ms_qc:
         plot.bar(positions, averages3p, color=ms_utils.rainbow[1], lw=0, label = "3' end")
         plot.set_xticks(positions[::10]+0.5)
         plot.set_xticklabels(positions[::10])
-        lg = plt.legend(loc=2, prop={'size': 6}, labelspacing=0.2)
+        lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
         lg.draw_frame(False)
         plot.set_xlabel("position of fragment end from RNA 5' end")
         plot.set_ylabel("average read fraction")
+        plot.set_title(lib.lib_settings.sample_name)
         plot.set_ylim(0, 1)
         out_name =  os.path.join(
           self.experiment_settings.get_rdir(),
@@ -267,7 +268,7 @@ class ms_qc:
         plt.clf()
 
     def plot_fragment_length_distributions(self):
-        fig = plt.figure(figsize=(16, 16))
+        fig = plt.figure(figsize=(8, 8))
         plot = fig.add_subplot(111)
         colormap = uniform_colormaps.viridis
         color_index = 0
@@ -278,10 +279,10 @@ class ms_qc:
             hist, bin_edges = np.histogram(fragment_lengths, bins = range(0, max(fragment_lengths)+1), normed = True)
             plot.plot(bin_edges[:-1], hist, color=colormap((color_index-1)/float(len(self.mse.libs))), lw=2, label = sample_name)
             color_index += 1
-            plot.set_xlabel("fragment length", fontsize=10)
-            plot.set_ylabel("fraction of fragments", fontsize=10)
+            plot.set_xlabel("fragment length", fontsize=14)
+            plot.set_ylabel("fraction of fragments", fontsize=14)
             #plot.set_ylim(0,0.5)
-        lg = plt.legend(loc=2, prop={'size': 6}, labelspacing=0.2)
+        lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
         lg.draw_frame(False)
         out_name = os.path.join(
             self.experiment_settings.get_rdir(),
@@ -295,8 +296,8 @@ class ms_qc:
         num_libs = len(self.mse.libs)
         fig = plt.figure(figsize=(16,16))
         plot_index = 1
-        cutoff = 100
-        log_bins = [0]+[10**x for x in range(8)]
+        cutoff = 64
+        log_bins = [0]+[2**x for x in range(26)]
         #hbins = np.arange(0, 4000, 10)
         #hbins = np.append(hbins, 10000000)
         for lib in self.mse.libs:
@@ -307,9 +308,10 @@ class ms_qc:
             plot.set_xlabel("# reads", fontsize = 10)
             plot.set_ylabel("# genes (%d/%d have >= %d reads)" % (ms_utils.number_passing_cutoff(dist, cutoff), len(dist), cutoff), fontsize = 10)
             plot.set_xlim(0, 10**8.1)
-            plot.set_xscale('symlog', linthreshx=1)
+            plot.set_xscale('symlog', linthreshx=1, basex=2)
+            plot.set_xticks(log_bins[::2])
             plot.axvline(cutoff, ls = 'dashed')
-            plot.set_title(sample_name, fontsize = 8)
+            plot.set_title(sample_name, fontsize = 14)
             plot_index += 1
         plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.15, wspace=0.4, hspace=0.6)
         out_name =  os.path.join(
