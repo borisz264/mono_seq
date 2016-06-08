@@ -40,8 +40,10 @@ class mse:
         self.settings.write_to_log('initializing libraries, counting reads')
         ms_utils.make_dir(self.rdir_path('sequence_counts'))
         self.libs = []
-        ms_utils.parmap(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings(),
-                        nprocs=self.threads)
+
+        ms_utils.parmap(lambda lib_settings: ms_lib.initialize_pool_sequence_mappings(self.settings, lib_settings),
+                        self.settings.iter_lib_settings(), nprocs=self.threads)
+        map(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings())
         self.settings.write_to_log('initializing libraries, counting reads, done')
 
 
@@ -212,7 +214,7 @@ class mse:
         return ms_utils.aopen(out_path, 'w')
 
     def perform_qc(self):
-        qc_engine = ms_qc.TPS_qc(self, self.settings, self.threads)
+        qc_engine = ms_qc.ms_qc(self, self.settings, self.threads)
         qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
 
         #if self.settings.get_property('collapse_identical_reads'):

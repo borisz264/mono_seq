@@ -12,6 +12,24 @@ from collections import Counter
 import pysam
 import ms_utils
 
+
+def initialize_pool_sequence_mappings(experiment_settings, lib_settings):
+    lib_settings.write_to_log('counting reads or loading counts')
+    if experiment_settings.get_property('force_recount') or not lib_settings.sequence_counts_exist():
+        pool_sequence_mappings = {}
+        gene_names = []
+        trimmed_sequences = ms_utils.convertFastaToDict(experiment_settings.get_trimmed_pool_fasta())
+        samfile = pysam.Samfile(lib_settings.get_mapped_reads(), "rb")
+        for sequence_name in trimmed_sequences:
+            pool_sequence_mappings[sequence_name] = pool_sequence_mapping(sequence_name,
+                                                                               trimmed_sequences[sequence_name],
+                                                                               samfile)
+
+        samfile.close()
+        ms_utils.makePickle(pool_sequence_mappings, lib_settings.get_sequence_counts())
+    lib_settings.write_to_log('done counting reads or loading counts')
+
+
 class ms_Lib:
     def __init__(self, experiment_settings, lib_settings):
         """
@@ -22,31 +40,8 @@ class ms_Lib:
         self.get_property = self.experiment_settings.get_property
         self.get_rdir = experiment_settings.get_rdir
         self.get_wdir = experiment_settings.get_wdir
-        self.pool_sequence_mappings = {}
-        self.initialize_pool_sequence_mappings()
+        self.pool_sequence_mappings = ms_utils.unPickle(self.lib_settings.get_sequence_counts())
         self.enrichment_sorted_mappings = None
-
-
-    def initialize_pool_sequence_mappings(self):
-        if self.get_property('force_recount') or not self.lib_settings.sequence_counts_exist():
-            print "counting"
-            gene_names = []
-            trimmed_sequences = ms_utils.convertFastaToDict(self.experiment_settings.get_trimmed_pool_fasta())
-            samfile = pysam.Samfile(self.lib_settings.get_mapped_reads(), "rb" )
-            for sequence_name in trimmed_sequences:
-                gene_name = sequence_name.split('_')[0] #Sequence names are assumed to be of type <gene_name>_TL_description.
-                                                        # For example: YDL112W_-41_WT or YDL112W_-41_mut_24-32
-                gene_names.append(gene_name)
-                self.pool_sequence_mappings[sequence_name] = pool_sequence_mapping(sequence_name,
-                                                                                   trimmed_sequences[sequence_name],
-                                                                                   samfile)
-
-            samfile.close()
-            #self.compute_lib_fractions()
-            #gene_counts = Counter(gene_names)
-            ms_utils.makePickle(self.pool_sequence_mappings, self.lib_settings.get_sequence_counts())
-        else:
-            self.pool_sequence_mappings = ms_utils.unPickle(self.lib_settings.get_sequence_counts())
 
 
     def get_single_TL_mappings(self, names_only = False):

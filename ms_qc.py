@@ -12,18 +12,18 @@ import pysam
 import math
 import gzip
 
-class TPS_qc:
-    def __init__(self, tpse, experiment_settings, threads):
+class ms_qc:
+    def __init__(self, mse, experiment_settings, threads):
         """
         Constructor for Library class
         """
         self.threads = threads
-        self.tpse = tpse
+        self.mse = mse
         self.experiment_settings = experiment_settings
         self.get_property = self.experiment_settings.get_property
         self.get_rdir = experiment_settings.get_rdir
         self.get_wdir = experiment_settings.get_wdir
-        ms_utils.make_dir(self.tpse.rdir_path('QC'))
+        ms_utils.make_dir(self.mse.rdir_path('QC'))
 
     def write_mapping_summary(self, output_file):
 
@@ -214,9 +214,9 @@ class TPS_qc:
     def get_library_count_correlation(self, lib1, lib2):
         lib1_counts = []
         lib2_counts = []
-        for sequence in lib1.pool_sequence_mappings:
-            lib1_counts.append(lib1.pool_sequence_mappings[sequence].total_passing_reads)
-            lib2_counts.append(lib2.pool_sequence_mappings[sequence].total_passing_reads)
+        for sequence_name in lib1.pool_sequence_mappings:
+            lib1_counts.append(lib1.pool_sequence_mappings[sequence_name].fragment_count)
+            lib2_counts.append(lib2.pool_sequence_mappings[sequence_name].fragment_count)
         spearmanR, spearmanP = stats.spearmanr(lib1_counts, lib2_counts)
         pearsonR, pearsonP = stats.pearsonr(lib1_counts, lib2_counts)
         return pearsonR, spearmanR, pearsonP, spearmanP
@@ -230,7 +230,7 @@ class TPS_qc:
         f = open(out_name, 'w')
         header = 'sample1\tsample2\tpearson r\t pearson p\t spearman r\t spearman p\n'
         f.write(header)
-        for libi, libj in itertools.combinations(self.tpse.libs, 2):
+        for libi, libj in itertools.combinations(self.mse.libs, 2):
             pearsonR, spearmanR, pearsonP, spearmanP = self.get_library_count_correlation(libi, libj)
             line = '%s\t%s\t%f\t%f\t%f\t%f\n' % (libi.get_sample_name(), libj.get_sample_name(),
                                                          pearsonR, pearsonP, spearmanR, spearmanP)
@@ -239,7 +239,7 @@ class TPS_qc:
 
 
     def plot_average_read_positions(self):
-        for lib in self.tpse.libs:
+        for lib in self.mse.libs:
             self.plot_average_read_positions_one_lib(lib)
 
     def plot_average_read_positions_one_lib(self, lib, min_x = 0, max_x = 150):
@@ -248,7 +248,7 @@ class TPS_qc:
 
         fig = plt.figure(figsize=(8,8))
         plot = fig.add_subplot(111)
-        plot.bar(positions , averages,color=bzUtils.rainbow[0], lw=0)
+        plot.bar(positions , averages,color=ms_utils.rainbow[0], lw=0)
         plot.set_xticks(positions[::10]+0.5)
         plot.set_xticklabels(positions[::10])
         plot.set_xlabel("position of read 5' end from RNA end")
@@ -262,13 +262,13 @@ class TPS_qc:
 
 
     def plot_count_distributions(self):
-        num_libs = len(self.tpse.libs)
+        num_libs = len(self.mse.libs)
         fig = plt.figure(figsize=(16,16))
         plot_index = 1
         cutoff = 100
         hbins = np.arange(0, 400, 10)
         hbins = np.append(hbins, 10000000)
-        for lib in self.tpse.libs:
+        for lib in self.mse.libs:
             plot = fig.add_subplot(math.sqrt(bzUtils.next_square_number(num_libs)), math.sqrt(bzUtils.next_square_number(num_libs)), plot_index)
             sample_name = lib.lib_settings.sample_name
             dist = self.get_library_count_distribution(lib)
