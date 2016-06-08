@@ -23,35 +23,30 @@ class ms_Lib:
         self.get_rdir = experiment_settings.get_rdir
         self.get_wdir = experiment_settings.get_wdir
         self.pool_sequence_mappings = {}
-        self.initialize_pool_sequence_mappings(mapq_cutoff=0)
+        self.initialize_pool_sequence_mappings()
         self.enrichment_sorted_mappings = None
 
 
-    def initialize_pool_sequence_mappings(self, mapq_cutoff = 30):
+    def initialize_pool_sequence_mappings(self):
         if self.get_property('force_recount') or not self.lib_settings.sequence_counts_exist():
+            print "counting"
             gene_names = []
             trimmed_sequences = ms_utils.convertFastaToDict(self.experiment_settings.get_trimmed_pool_fasta())
+            samfile = pysam.Samfile(self.lib_settings.get_mapped_reads(), "rb" )
             for sequence_name in trimmed_sequences:
                 gene_name = sequence_name.split('_')[0] #Sequence names are assumed to be of type <gene_name>_TL_description.
                                                         # For example: YDL112W_-41_WT or YDL112W_-41_mut_24-32
                 gene_names.append(gene_name)
-                self.pool_sequence_mappings[sequence_name] = pool_sequence_mapping(sequence_name, trimmed_sequences[sequence_name])
-            samfile = pysam.Samfile(self.lib_settings.get_mapped_reads(), "rb" )
-            ra = read_assigner(self.pool_sequence_mappings, samfile, mapq_cutoff)
-            for aligned_read in samfile.fetch():
-                ra.assign_read(aligned_read)
+                self.pool_sequence_mappings[sequence_name] = pool_sequence_mapping(sequence_name,
+                                                                                   trimmed_sequences[sequence_name],
+                                                                                   samfile)
+
             samfile.close()
-            self.compute_lib_fractions()
-            gene_counts = Counter(gene_names)
-            for mapping_name in self.pool_sequence_mappings:
-                if gene_counts[mapping_name.split('_')[0]]==1:
-                    self.pool_sequence_mappings[mapping_name].is_only_tl = True
-                else:
-                    assert gene_counts[mapping_name.split('_')[0]] != 0
-                    self.pool_sequence_mappings[mapping_name].is_only_tl = False
+            #self.compute_lib_fractions()
+            #gene_counts = Counter(gene_names)
             ms_utils.makePickle(self.pool_sequence_mappings, self.lib_settings.get_sequence_counts())
         else:
-            self.pool_sequence_mappings = bzUtils.unPickle(self.lib_settings.get_sequence_counts())
+            self.pool_sequence_mappings = ms_utils.unPickle(self.lib_settings.get_sequence_counts())
 
 
     def get_single_TL_mappings(self, names_only = False):
@@ -146,27 +141,46 @@ class pool_sequence_mapping:
         Enrichment relative to input library
 
     """
-    def __init__(self, sequence_name, full_sequence):
+    def __init__(self, sequence_name, full_sequence, sam_file):
         self.sequence_name = sequence_name
         self.full_sequence = full_sequence
-        self.poor_quality_reads = 0
-        self.reverse_reads = 0
         self.total_passing_reads = 0
-        self.reads_at_position = defaultdict(int) #will map position to # of reads there
-        self.enrichment = None
-        self.is_only_tl = None
+        self.fragment_5p_ends_at_position = defaultdict(int) #will map position to # of reads there
+        self.fragment_3p_ends_at_position = defaultdict(int) #will map position to # of reads there
+        self.fragment_lengths_at_position = defaultdict(list)  # will map position to a list of fragment lengths with 5' ends at that position
+        self.fragment_lengths = []
+        self.paired_end_mapping_tags = defaultdict(int)
+        self.assign_read_ends_from_sam(sam_file)
+        self.fragment_count = len(self.fragment_lengths)
+
+    def assign_read_ends_from_sam(self, sam_file):
+        all_mapping_reads = sam_file.fetch(reference = self.sequence_name)
+        for read in all_mapping_reads:
+            # only need to look at the forward mapping read in each pair, since the necessary mate info is there
+            if read.is_read1:
+                #read1 should be on the forawrd strans since --norc should be specified
+                #this alignment should be the primary one. IF this throws erros, I will need to write more logic.
+                assert (not read.is_reverse) and (not read.is_secondary)
+                pe_mapping_tag = read.get_tag('YT') #this should always return 'CP' for a concordantly-mapped pair
+                self.paired_end_mapping_tags[pe_mapping_tag]+=1
+                fragment_start = read.reference_start #0-based start of fragment
+                fragment_length = read.template_length
+                fragment_end = fragment_start + fragment_length
+                self.fragment_5p_ends_at_position[fragment_start] += 1
+                self.fragment_3p_ends_at_position[fragment_end] += 1
+                self.fragment_lengths_at_position[fragment_start].append(fragment_length)
+                self.fragment_lengths.append(fragment_length)
 
     def contains_subsequence(self, subsequence):
         if subsequence in self.full_sequence:
             return True
         else:
             return False
+
     def positions_of_subsequence(self, subsequence):
         #this regex will NOT return overlapping sequences
         return [m.start() for m in re.finditer(subsequence, self.full_sequence)]
 
-    def get_number_rt_stops(self):
-        return float(sum([self.reads_at_position[i] for i in range(3,len(self.full_sequence))]))
     def fraction_at_position(self, position):
         if position < 0 or position > len(self.full_sequence)-1:
             return None
@@ -175,26 +189,4 @@ class pool_sequence_mapping:
             if self.get_number_rt_stops() == 0:
                 return 0
             else:
-                return self.reads_at_position[position]/self.get_number_rt_stops()
-
-class read_assigner:
-    def __init__(self, pool_sequence_mappings, samfile, mapq_cutoff):
-        self.mapq_cutoff = mapq_cutoff
-        self.pool_sequence_mappings = pool_sequence_mappings
-        self.samfile = samfile
-
-    def assign_read(self, aligned_read):
-        sequence_id = aligned_read.tid
-        sequence_name = self.samfile.getrname(sequence_id)
-        pool_sequence_mapping = self.pool_sequence_mappings[sequence_name]
-        alignment_start = aligned_read.pos
-        is_reverse = aligned_read.is_reverse
-        mapq_score = aligned_read.mapq
-        if mapq_score >= self.mapq_cutoff and not is_reverse:
-            pool_sequence_mapping.reads_at_position[alignment_start] += 1
-            pool_sequence_mapping.total_passing_reads += 1
-        else:
-            if mapq_score < self.mapq_cutoff:
-                pool_sequence_mapping.poor_quality_reads += 1
-            if is_reverse:
-                pool_sequence_mapping.reverse_reads += 1
+                return self.fragment_5p_ends_at_position[position] / self.get_number_rt_stops()

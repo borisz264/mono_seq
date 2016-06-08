@@ -85,12 +85,6 @@ class TPS_qc:
                 line =f.next()
                 multiply_aligned_pairs = int(line.strip().split()[0])
                 line =f.next()
-                line =f.next()
-                line =f.next()
-                line =f.next()
-                line =f.next()
-                line =f.next()
-                line =f.next()
                 overall_alignment_percent = float(line.strip().split()[0][:-1])
         f.close()
         return total_reads, paired_reads, unaligned_pairs, uniquely_aligned_pairs, multiply_aligned_pairs, overall_alignment_percent

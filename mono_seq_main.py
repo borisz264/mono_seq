@@ -24,7 +24,6 @@ import ms_settings
 import ms_utils
 import ms_lib
 import ms_qc
-import stacked_bar_kmers
 
 
 class mse:
@@ -35,13 +34,14 @@ class mse:
         self.trim_reference_pool_fasta()
         self.build_bowtie_index()
         self.map_reads()
-        #self.initialize_libs()
+        self.initialize_libs()
 
     def initialize_libs(self):
         self.settings.write_to_log('initializing libraries, counting reads')
         ms_utils.make_dir(self.rdir_path('sequence_counts'))
         self.libs = []
-        map(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings())
+        ms_utils.parmap(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings(),
+                        nprocs=self.threads)
         self.settings.write_to_log('initializing libraries, counting reads, done')
 
 
@@ -218,7 +218,7 @@ class mse:
         #if self.settings.get_property('collapse_identical_reads'):
         #    qc_engine.plot_pcr_bias()
         #qc_engine.identify_contaminating_sequences()
-        #qc_engine.print_library_count_concordances()
+        qc_engine.print_library_count_concordances()
         #qc_engine.plot_average_read_positions()
         #qc_engine.plot_count_distributions()
 
