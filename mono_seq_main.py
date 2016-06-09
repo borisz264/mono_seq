@@ -232,8 +232,11 @@ class mse:
                 'raw_counts.txt')
 
         header = ['sequence name\t'] + '\t'.join([lib.settings.sample_name for lib in self.libs]) + ['\n']
+        summary_file.write(header)
         for sequence_name in self.libs[0].pool_sequence_mappings:
-            pass
+
+            out_line = '%s\t%s\n' % (sequence_name, '\t'.join(['%f' % lib.pool_sequence_mappings[sequence_name].fragment_count]))
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("settings_file")

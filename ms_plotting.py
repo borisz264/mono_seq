@@ -165,6 +165,3 @@ def plot_single_sequence_read_distributions(self, sequence_name):
         '%(sequence_name)s.read_positions.pdf' % {'sequence_name': sequence_name})
     plt.savefig(out_name, transparent='True', format='pdf')
     plt.clf()
-
-
-def write_counts_table()

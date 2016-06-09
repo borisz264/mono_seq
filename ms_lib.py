@@ -35,7 +35,7 @@ class ms_Lib:
         self.get_wdir = experiment_settings.get_wdir
         print "unpickling %s counts" % lib_settings.sample_name
         self.pool_sequence_mappings = ms_utils.unPickle(self.lib_settings.get_sequence_counts())
-        self.enrichment_sorted_mappings = None
+        self.total_mapped_fragments = sum([mapping.fragment_count for mapping in self.pool_sequence_mappings.values()])
 
 
     def get_single_TL_mappings(self, names_only = False):
@@ -88,11 +88,12 @@ class ms_Lib:
         else:
             return passing_mappings
 
-    def get_all_fragment_lengths(self):
-        all_lengths = []
+    def get_all_fragment_length_counts(self):
+        all_length_counts = defaultdict(int)
         for pool_sequence_mapping in self.pool_sequence_mappings.values():
-            all_lengths = all_lengths + pool_sequence_mapping.fragment_lengths
-        return all_lengths
+            for fragment_length in pool_sequence_mapping.length_dist:
+                all_length_counts[fragment_length] += pool_sequence_mapping.length_dist[fragment_length]
+        return all_length_counts
 
     def get_fragment_count_distribution(self):
         return [self.pool_sequence_mappings[sequence].fragment_count for sequence in self.pool_sequence_mappings]
@@ -116,11 +117,12 @@ class pool_sequence_mapping:
         self.fragment_5p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_3p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_lengths_at_position = defaultdict(list)  # will map position to a list of fragment lengths with 5' ends at that position
-        self.fragment_lengths = []
+        #self.fragment_lengths = []
         self.paired_end_mapping_tags = defaultdict(int)
-        self.assign_read_ends_from_sam(sam_file)
-        self.fragment_count = len(self.fragment_lengths)
+        self.fragment_count = 0
         self.length_dist = defaultdict(int)
+
+        self.assign_read_ends_from_sam(sam_file)
 
     def assign_read_ends_from_sam(self, sam_file):
         all_mapping_reads = sam_file.fetch(reference = self.sequence_name)
@@ -137,8 +139,10 @@ class pool_sequence_mapping:
                 fragment_end = fragment_start + fragment_length
                 self.fragment_5p_ends_at_position[fragment_start] += 1
                 self.fragment_3p_ends_at_position[fragment_end] += 1
-                self.fragment_lengths_at_position[fragment_start].append(fragment_length)
-                self.fragment_lengths.append(fragment_length)
+                self.fragment_count += 1
+                self.length_dist[fragment_length] += 1
+                #self.fragment_lengths_at_position[fragment_start].append(fragment_length)
+                #self.fragment_lengths.append(fragment_length)
 
     def contains_subsequence(self, subsequence):
         if subsequence in self.full_sequence:

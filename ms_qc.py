@@ -274,10 +274,11 @@ class ms_qc:
         color_index = 0
         for lib in self.mse.libs:
             sample_name = lib.lib_settings.sample_name
-            fragment_lengths = lib.get_all_fragment_lengths()
+            fragment_length_counts = lib.get_all_fragment_length_counts()
+            bins = range(0, max(fragment_length_counts.keys()))
+            frangment_length_fractions = np.array([fragment_length_counts[length] for length in bins])/float(lib.total_mapped_fragments)
             # note that all but the last bin exclude the right (larger) edge of the bin. So I add an extra bin.
-            hist, bin_edges = np.histogram(fragment_lengths, bins = range(0, max(fragment_lengths)+1), normed = True)
-            plot.plot(bin_edges[:-1], hist, color=colormap((color_index-1)/float(len(self.mse.libs))), lw=2, label = sample_name)
+            plot.plot(bins, frangment_length_fractions, color=colormap((color_index-1)/float(len(self.mse.libs))), lw=2, label = sample_name)
             color_index += 1
             plot.set_xlabel("fragment length", fontsize=14)
             plot.set_ylabel("fraction of fragments", fontsize=14)
@@ -306,7 +307,7 @@ class ms_qc:
             dist = lib.get_fragment_count_distribution()
             plot.hist(dist, bins = log_bins, color=ms_utils.skyBlue, histtype='stepfilled', edgecolor = None, lw = 0)
             plot.set_xlabel("# reads", fontsize = 10)
-            plot.set_ylabel("# genes (%d/%d have >= %d reads)" % (ms_utils.number_passing_cutoff(dist, cutoff), len(dist), cutoff), fontsize = 10)
+            plot.set_ylabel("# sequences (%d/%d have >= %d reads)" % (ms_utils.number_passing_cutoff(dist, cutoff), len(dist), cutoff), fontsize = 10)
             plot.set_xlim(0, 10**8.1)
             plot.set_xscale('symlog', linthreshx=1, basex=2)
             plot.set_xticks(log_bins[::2])
