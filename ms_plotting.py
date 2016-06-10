@@ -1,167 +1,141 @@
 import ms_utils
-import mono_seq_main
 import numpy
-import matplotlib
 import matplotlib.pyplot as plt
 plt.rcParams['pdf.fonttype'] = 42 #leaves most text as actual text in PDFs, not outlines
 import os
-from collections import defaultdict
+import scipy.stats as stats
 
-def plot_AUG_reads(self, which_AUG=1, unique_only=False, min_x=-30, max_x=30, read_cutoff=100):
-    # 1 is for the first AUG, 2 the 2nd and so on. Only TLs with enough AUGs are counted
-    assert which_AUG > 0
-    positions = numpy.array(range(min_x, max_x + 1))
-    mappings_passing_cutoff_in_all_libs = self.libs[0].get_mappings_with_minimum_reads(read_cutoff, names_only=True)
-    for lib in self.libs[1:]:
-        mappings_passing_cutoff_in_all_libs = \
-            mappings_passing_cutoff_in_all_libs.intersection(lib.get_mappings_with_minimum_reads(read_cutoff,
-                                                                                                 names_only=True))
-
-    if unique_only:
-        out_name = os.path.join(
-            self.settings.get_rdir(),
-            'plots',
-            'unique_AUG%d_density.pdf' % (which_AUG))
-        mapping_names = mappings_passing_cutoff_in_all_libs.intersection(lib.get_single_TL_mappings(names_only=True))
-    else:
-        out_name = os.path.join(
-            self.settings.get_rdir(),
-            'plots',
-            'AUG%d_density.pdf' % (which_AUG))
-        mapping_names = mappings_passing_cutoff_in_all_libs
-
-    fig = plt.figure(figsize=(8, 8))
-    plot = fig.add_subplot(111)
-    positions = range(min_x, max_x)
-    color_index = 0
-    genes_plotted = set()
-    for lib in self.libs:
-        offset_sum = defaultdict(float)
-        offset_counts = defaultdict(int)
-        num_genes_counted = 0
-        for mapping_name in mapping_names:
-            mapping = lib.pool_sequence_mappings[mapping_name]
-            AUG_positions = mapping.positions_of_subsequence('ATG')
-            if len(AUG_positions) >= which_AUG:
-                genes_plotted.add(mapping_name)
-                num_genes_counted += 1
-                alignment_position = AUG_positions[which_AUG - 1]
-                for position in positions:
-                    AUG_relative_position = alignment_position - position
-                    read_fraction_at_position = mapping.fraction_at_position(AUG_relative_position)
-                    if read_fraction_at_position != None:
-                        offset_sum[position] += read_fraction_at_position
-                        offset_counts[position] += 1
-        offset_averages = {}
-        for position in positions:
-            # print position, offset_sum[position], float(offset_counts[position])
-            offset_averages[position] = offset_sum[position] / float(offset_counts[position])
-        offset_average_array = [offset_averages[position] for position in positions]
-        plot.plot(positions, offset_average_array, color=ms_utils.rainbow[color_index], lw=2,
-                  label='%s (%d)' % (lib.get_sample_name(), num_genes_counted))
-        color_index += 1
-    plot.axvline(16, ls='--')
-    plot.axvline(19, ls='--')
-
-    lg = plt.legend(loc=2, prop={'size': 10}, labelspacing=0.2)
-    lg.draw_frame(False)
-    plot.set_xticks(positions[::3])
-    plot.set_xticklabels(positions[::3])
-    plot.set_xlabel("position of read 5' end from AUG %d" % (which_AUG))
-    plot.set_ylabel("average read fraction")
-    plt.savefig(out_name, transparent='True', format='pdf')
-    plt.clf()
-    print genes_plotted
-    for mapping_name in genes_plotted:
-        self.plot_single_sequence_read_distributions(mapping_name)
-
-
-def plot_last_AUG_reads(self, unique_only=False, min_x=-30, max_x=30, read_cutoff=100):
-    # 1 is for the first AUG, 2 the 2nd and so on. Only TLs with enough AUGs are counted
-    positions = numpy.array(range(min_x, max_x + 1))
-    mappings_passing_cutoff_in_all_libs = self.libs[0].get_mappings_with_minimum_reads(read_cutoff, names_only=True)
-    for lib in self.libs[1:]:
-        mappings_passing_cutoff_in_all_libs = \
-            mappings_passing_cutoff_in_all_libs.intersection(lib.get_mappings_with_minimum_reads(read_cutoff,
-                                                                                                 names_only=True))
-
-    if unique_only:
-        out_name = os.path.join(
-            self.settings.get_rdir(),
-            'plots',
-            'unique_last_AUG_density.pdf')
-        mapping_names = mappings_passing_cutoff_in_all_libs.intersection(lib.get_single_TL_mappings(names_only=True))
-    else:
-        out_name = os.path.join(
-            self.settings.get_rdir(),
-            'plots',
-            'last_AUG_density.pdf')
-        mapping_names = mappings_passing_cutoff_in_all_libs
-
-    fig = plt.figure(figsize=(8, 8))
-    plot = fig.add_subplot(111)
-    positions = range(min_x, max_x)
-    color_index = 0
-    for lib in self.libs:
-        offset_sum = defaultdict(float)
-        offset_counts = defaultdict(int)
-        num_genes_counted = 0
-        for mapping_name in mapping_names:
-            mapping = lib.pool_sequence_mappings[mapping_name]
-            AUG_positions = mapping.positions_of_subsequence('ATG')
-            if len(AUG_positions) >= 1:
-                num_genes_counted += 1
-                alignment_position = AUG_positions[-1]
-                for position in positions:
-                    AUG_relative_position = alignment_position - position
-                    read_fraction_at_position = mapping.fraction_at_position(AUG_relative_position)
-                    if read_fraction_at_position != None:
-                        offset_sum[position] += read_fraction_at_position
-                        offset_counts[position] += 1
-        offset_averages = {}
-        for position in positions:
-            # print position, offset_sum[position], float(offset_counts[position])
-            offset_averages[position] = offset_sum[position] / float(offset_counts[position])
-        offset_average_array = [offset_averages[position] for position in positions]
-        plot.plot(positions, offset_average_array, color=ms_utils.rainbow[color_index], lw=2,
-                  label='%s (%d)' % (lib.get_sample_name(), num_genes_counted))
-        color_index += 1
-    plot.axvline(16, ls='--')
-    plot.axvline(19, ls='--')
-    lg = plt.legend(loc=2, prop={'size': 10}, labelspacing=0.2)
-    lg.draw_frame(False)
-    plot.set_xticks(positions[::3])
-    plot.set_xticklabels(positions[::3])
-    plot.set_xlabel("position of read 5' end from last AUG")
-    plot.set_ylabel("average read fraction")
-    plt.savefig(out_name, transparent='True', format='pdf')
-    plt.clf()
-
-
-def plot_single_sequence_read_distributions(self, sequence_name):
-    fig = plt.figure(figsize=(8, 8))
-    plot = fig.add_subplot(111)
-    colorIndex = 0
-    for lib in self.libs:
-        mapping = lib.pool_sequence_mappings[sequence_name]
-        positions = numpy.array(range(0, len(mapping.full_sequence)))
-        fractions = [mapping.fraction_at_position(position) for position in positions]
-        plot.plot(positions, fractions, color=ms_utils.rainbow[colorIndex], lw=1, label=lib.lib_settings.sample_name)
-        colorIndex += 1
-    for AUG_pos in mapping.positions_of_subsequence('ATG'):
-        plot.axvline(AUG_pos + 16, ls='--')
-        plot.axvline(AUG_pos + 19, ls='--')
-
-    plot.set_xticks(positions[::10])
-    plot.set_xticklabels(positions[::10])
-    plot.set_xlim(-1, len(mapping.full_sequence))
-    plot.set_xlabel("position of read 5' end from RNA end (--expected AUG toeprints)")
-    plot.set_ylabel("read fraction")
-    lg = plt.legend(loc=2, prop={'size': 10}, labelspacing=0.2)
-    lg.draw_frame(False)
-    out_name = os.path.join(
-        self.settings.get_rdir(),
+def all_library_rpm_scatter(mse):
+    output_file = os.path.join(
+        mse.settings.get_rdir(),
         'plots',
-        '%(sequence_name)s.read_positions.pdf' % {'sequence_name': sequence_name})
-    plt.savefig(out_name, transparent='True', format='pdf')
-    plt.clf()
+        'all_scatter_plots.pdf')
+    num_libs = len(mse.libs)
+    num_plots_wide = num_libs-1
+    num_plots_high = num_libs-1
+    fig = plt.figure(figsize=(24,24))
+
+    for i in range(len(mse.libs)):
+        for j in range(i+1, len(mse.libs)):
+            plot_index = (j-1)*(num_plots_wide)+(i+1)
+            plot = fig.add_subplot(num_plots_high, num_plots_wide, plot_index)
+            if j == num_plots_high:
+                plot.set_xlabel("%s RPM" % (mse.libs[i].lib_settings.sample_name))
+            if i == 0:
+                plot.set_ylabel("%s RPM" % (mse.libs[j].lib_settings.sample_name))
+            plot.set_xscale('symlog', linthreshx=0.1)
+            plot.set_yscale('symlog', linthreshy=0.1)
+            x = mse.libs[i].name_sorted_rpms()
+            y = mse.libs[j].name_sorted_rpms()
+            plot.scatter(x, y, color=ms_utils.black, s=3)
+            plot.plot(numpy.arange(0,1000000,1), numpy.arange(0,1000000,1), color=ms_utils.vermillion, lw = 1, linestyle='dashed')
+            rho, pval = stats.spearmanr(x, y)
+
+            plot.annotate('rho=%.3f' % (rho), xy=(0, 0.8), xytext=(0, 0.8), textcoords='axes fraction')
+            plot.set_xlim(0, 1000000)
+            plot.set_ylim(0, 1000000)
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, wspace=0.2, hspace=0.2)
+    plt.savefig(output_file, transparent='True', format='pdf')
+
+def monosome_over_mrnp_reproducibility(mse):
+    output_file = os.path.join(
+        mse.settings.get_rdir(),
+        'plots',
+        'mono_over_mRNP_plots.pdf')
+    num_libs = len(mse.monosome_libs)
+    num_plots_wide = num_libs-1
+    num_plots_high = num_libs-1
+    fig = plt.figure(figsize=(8,8))
+
+    for i in range(len(mse.monosome_libs)):
+        for j in range(i+1, len(mse.monosome_libs)):
+            plot_index = (j-1)*(num_plots_wide)+(i+1)
+            plot = fig.add_subplot(num_plots_high, num_plots_wide, plot_index)
+            if j == num_plots_high:
+                plot.set_xlabel("%s / %s RPM" % (mse.monosome_libs[i].lib_settings.sample_name, mse.mrnp_libs[i].lib_settings.sample_name))
+            if i == 0:
+                plot.set_ylabel("%s / %s RPM" % (mse.monosome_libs[j].lib_settings.sample_name, mse.mrnp_libs[j].lib_settings.sample_name))
+            plot.set_xscale('symlog', linthreshx=0.01)
+            plot.set_yscale('symlog', linthreshy=0.01)
+            x = mse.monosome_libs[i].name_sorted_rpms()/mse.mrnp_libs[i].name_sorted_rpms()
+            y = mse.monosome_libs[j].name_sorted_rpms()/mse.mrnp_libs[j].name_sorted_rpms()
+            plot.scatter(x, y, color=ms_utils.black, s=3)
+            plot.plot(numpy.arange(0,1000,1), numpy.arange(0,1000,1), color=ms_utils.vermillion, lw = 1, linestyle='dashed')
+            rho, pval = stats.spearmanr(x, y)
+            fx, fy = ms_utils.filter_x_y_pairs(x, y)
+            r, p = stats.pearsonr(fx, fy)
+            plot.annotate('rho,r=%.3f,%.3f' % (rho, r), xy=(0, 0.9), xytext=(0, 0.9), textcoords='axes fraction')
+            plot.set_xlim(0, 1000)
+            plot.set_ylim(0, 1000)
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1, wspace=0.2, hspace=0.2)
+    plt.savefig(output_file, transparent='True', format='pdf')
+
+def monosome_over_total_reproducibility(mse):
+    output_file = os.path.join(
+        mse.settings.get_rdir(),
+        'plots',
+        'mono_over_total_plots.pdf')
+    num_libs = len(mse.monosome_libs)
+    num_plots_wide = num_libs-1
+    num_plots_high = num_libs-1
+    fig = plt.figure(figsize=(8,8))
+
+    for i in range(len(mse.monosome_libs)):
+        for j in range(i+1, len(mse.monosome_libs)):
+            plot_index = (j-1)*(num_plots_wide)+(i+1)
+            plot = fig.add_subplot(num_plots_high, num_plots_wide, plot_index)
+            if j == num_plots_high:
+                plot.set_xlabel("%s / %s RPM" % (mse.monosome_libs[i].lib_settings.sample_name, mse.total_libs[i].lib_settings.sample_name))
+            if i == 0:
+                plot.set_ylabel("%s / %s RPM" % (mse.monosome_libs[j].lib_settings.sample_name, mse.total_libs[j].lib_settings.sample_name))
+            plot.set_xscale('symlog', linthreshx=0.01)
+            plot.set_yscale('symlog', linthreshy=0.01)
+            x = mse.monosome_libs[i].name_sorted_rpms()/mse.total_libs[i].name_sorted_rpms()
+            y = mse.monosome_libs[j].name_sorted_rpms()/mse.total_libs[j].name_sorted_rpms()
+            plot.scatter(x, y, color=ms_utils.black, s=3)
+            plot.plot(numpy.arange(0,1000,1), numpy.arange(0,1000,1), color=ms_utils.vermillion, lw = 1, linestyle='dashed')
+            rho, pval = stats.spearmanr(x, y)
+            fx, fy = ms_utils.filter_x_y_pairs(x, y)
+            r, p = stats.pearsonr(fx, fy)
+            plot.annotate('rho,r=%.3f,%.3f' % (rho, r), xy=(0, 0.9), xytext=(0, 0.9), textcoords='axes fraction')
+            plot.set_xlim(0, 1000)
+            plot.set_ylim(0, 1000)
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1, wspace=0.2, hspace=0.2)
+    plt.savefig(output_file, transparent='True', format='pdf')
+
+def monosome_over_mrnp_plus_monosome_reproducibility(mse):
+    output_file = os.path.join(
+        mse.settings.get_rdir(),
+        'plots',
+        'mono_over_mRNP_plus_mono_plots.pdf')
+    num_libs = len(mse.monosome_libs)
+    num_plots_wide = num_libs-1
+    num_plots_high = num_libs-1
+    fig = plt.figure(figsize=(8,8))
+
+    for i in range(len(mse.monosome_libs)):
+        for j in range(i+1, len(mse.monosome_libs)):
+            plot_index = (j-1)*(num_plots_wide)+(i+1)
+            plot = fig.add_subplot(num_plots_high, num_plots_wide, plot_index)
+            if j == num_plots_high:
+                plot.set_xlabel("%s / (%s+%s) RPM" % (mse.monosome_libs[i].lib_settings.sample_name,
+                                                      mse.monosome_libs[i].lib_settings.sample_name,
+                                                      mse.mrnp_libs[i].lib_settings.sample_name))
+            if i == 0:
+                plot.set_ylabel("%s / (%s+%s) RPM" % (mse.monosome_libs[j].lib_settings.sample_name,
+                                                      mse.monosome_libs[j].lib_settings.sample_name,
+                                                      mse.mrnp_libs[j].lib_settings.sample_name))
+            #plot.set_xscale('symlog', linthreshx=0.01)
+            #plot.set_yscale('symlog', linthreshy=0.01)
+            x = mse.monosome_libs[i].name_sorted_rpms()/(mse.mrnp_libs[i].name_sorted_rpms()+mse.monosome_libs[i].name_sorted_rpms())
+            y = mse.monosome_libs[j].name_sorted_rpms()/(mse.mrnp_libs[j].name_sorted_rpms()+mse.monosome_libs[j].name_sorted_rpms())
+            plot.scatter(x, y, color=ms_utils.black, s=3)
+            plot.plot(numpy.arange(0,1000,1), numpy.arange(0,1000,1), color=ms_utils.vermillion, lw = 1, linestyle='dashed')
+            rho, pval = stats.spearmanr(x, y)
+            fx, fy = ms_utils.filter_x_y_pairs(x, y)
+            r, p = stats.pearsonr(fx, fy)
+            plot.annotate('rho,r=%.3f,%.3f' % (rho, r), xy=(0, 0.9), xytext=(0, 0.9), textcoords='axes fraction')
+            plot.set_xlim(0, 1)
+            plot.set_ylim(0, 1)
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1, wspace=0.2, hspace=0.2)
+    plt.savefig(output_file, transparent='True', format='pdf')

@@ -16,7 +16,7 @@ import ms_settings
 import ms_utils
 import ms_lib
 import ms_qc
-
+import ms_plotting
 
 class mse:
     def __init__(self, settings, threads):
@@ -37,6 +37,21 @@ class mse:
                         self.settings.iter_lib_settings(), nprocs=self.threads)
         map(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings())
         self.settings.write_to_log('initializing libraries, counting reads, done')
+        self.monosome_libs = [self.find_lib_by_sample_name(sample_name) for
+                              sample_name in self.settings.get_property('monosome_libraries')]
+        self.mrnp_libs = [self.find_lib_by_sample_name(sample_name) for
+                              sample_name in self.settings.get_property('mrnp_libraries')]
+        self.total_libs = [self.find_lib_by_sample_name(sample_name) for
+                          sample_name in self.settings.get_property('total_libraries')]
+        self.input_libs = [self.find_lib_by_sample_name(sample_name) for
+                           sample_name in self.settings.get_property('total_libraries')]
+
+
+    def find_lib_by_sample_name(self, sample_name):
+        for lib in self.libs:
+            if lib.lib_settings.sample_name == sample_name:
+                return lib
+        assert False #if this triggers, your settings file is broken.
 
 
     def initialize_lib(self, lib_settings):
@@ -52,35 +67,14 @@ class mse:
     def make_tables(self):
         ms_utils.make_dir(self.rdir_path('tables'))
         self.make_counts_table()
+        self.make_counts_table(fractional=True)
 
     def make_plots(self):
         ms_utils.make_dir(self.rdir_path('plots'))
-        self.plot_AUG_reads()
-        self.plot_AUG_reads(unique_only = True,)
-        self.plot_last_AUG_reads()
-        self.plot_last_AUG_reads(unique_only = True,)
-        self.plot_AUG_reads(which_AUG = 2, unique_only = True)
-        self.plot_AUG_reads(which_AUG = 2)
-
-
-    def make_table_header(self, of):
-        """
-        takes a file handle and writes a good header for it such that
-        each lane is a column.
-        """
-        of.write('#')
-        for lib in self.libs:
-            of.write('\t' + lib.get_barcode())
-        of.write('\n[%s]' % self.settings.get_property('protein_name'))
-        for lib in self.libs:
-            of.write('\t%s' % lib.get_conc())
-        of.write('\nwashes')
-        for lib in self.libs:
-            of.write('\t%i' % lib.get_washes())
-        of.write('\nT (C)')
-        for lib in self.libs:
-            of.write('\t%s' % lib.get_temperature())
-        of.write('\n')
+        ms_plotting.all_library_rpm_scatter(self)
+        ms_plotting.monosome_over_mrnp_reproducibility(self)
+        ms_plotting.monosome_over_total_reproducibility(self)
+        ms_plotting.monosome_over_mrnp_plus_monosome_reproducibility(self)
 
     def remove_adaptor(self):
         if not self.settings.get_property('force_retrim'):
@@ -207,8 +201,8 @@ class mse:
 
     def perform_qc(self):
         qc_engine = ms_qc.ms_qc(self, self.settings, self.threads)
-        #qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
-        #qc_engine.print_library_count_concordances()
+        qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
+        qc_engine.print_library_count_concordances()
         qc_engine.plot_average_read_positions()
         qc_engine.plot_fragment_length_distributions()
         qc_engine.plot_count_distributions()
@@ -216,26 +210,33 @@ class mse:
     def make_counts_table(self, fractional=False):
         """
         write out number of fragments mapping to each TL in each dataset
-        :param fractional: if True, replace raw counts with library fraction
+        :param fractional: if True, replace raw counts with library fraction in reads per million
         :return:
         """
-        #TODO - finish this method!
         if fractional:
-            summary_file = os.path.join(
-                self.get_rdir(),
-                'tables',
-                'fractional_counts.txt')
+            summary_file = open(os.path.join(
+                self.rdir_path('tables'),
+                'rpm.txt'), 'w')
         else:
-            summary_file = os.path.join(
-                self.get_rdir(),
-                'tables',
-                'raw_counts.txt')
+            summary_file = open(os.path.join(
+                self.rdir_path('tables'),
+                'raw_counts.txt'), 'w')
 
-        header = ['sequence name\t'] + '\t'.join([lib.settings.sample_name for lib in self.libs]) + ['\n']
+        header = 'sequence name\t' + '\t'.join([lib.lib_settings.sample_name for lib in self.libs]) + '\n'
         summary_file.write(header)
-        for sequence_name in self.libs[0].pool_sequence_mappings:
-
-            out_line = '%s\t%s\n' % (sequence_name, '\t'.join(['%f' % lib.pool_sequence_mappings[sequence_name].fragment_count]))
+        if fractional:
+            for sequence_name in self.libs[0].pool_sequence_mappings:
+                out_line = '%s\t%s\n' % (sequence_name,
+                                         '\t'.join(['%f' % ((10**6)*lib.pool_sequence_mappings[sequence_name].fragment_count/float(lib.total_mapped_fragments)) for lib in self.libs]))
+                summary_file.write(out_line)
+        else:
+            for sequence_name in self.libs[0].pool_sequence_mappings:
+                out_line = '%s\t%s\n' % (sequence_name,
+                                         '\t'.join(['%f' %
+                                                    lib.pool_sequence_mappings[sequence_name].fragment_count
+                                                    for lib in self.libs]))
+                summary_file.write(out_line)
+        summary_file.close()
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -274,18 +275,18 @@ def main():
         settings.write_to_log('performing QC')
         ms_experiment.perform_qc()
         settings.write_to_log('done performing QC')
-    '''
     if args.make_tables or args.all_tasks:
         print 'tables'
         settings.write_to_log('making tables')
         ms_experiment.make_tables()
         settings.write_to_log('done making tables')
+
     if args.make_plots or args.all_tasks:
         print 'plots'
         settings.write_to_log('making plots')
         ms_experiment.make_plots()
         settings.write_to_log('done making plots')
-
+    '''
     if args.comparisons or args.all_tasks:
         settings.write_to_log('doing comparisons')
         ms_experiment.compare_all_other_experiments()

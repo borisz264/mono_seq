@@ -169,6 +169,21 @@ def significantly_enriched(xs, zthresh=2., scale='linear'):
     xs = stats.zscore(xs)
     return [x > zthresh for x in xs]
 
+def filter_x_y_pairs(x, y, filter_list = [float('inf'), -1*float('inf')]):
+    '''
+    takes 2 paired arrays, and returns matched copies of them with any positions with values in
+    filter_list removed from both arrays, to keep them synced.
+    alos removes NaN (defined by testing if the entry equals itself, which fails for NaN)
+    :param filter_list: list of values to remove
+    :return:
+    '''
+    filtered_x, filtered_y = [], []
+    assert len(x) == len(y)
+    for i in range(len(x)):
+        if x[i] not in filter_list and y[i] not in filter_list and x[i]==x[i] and y[i]==y[i]:
+            filtered_x.append(x[i])
+            filtered_y.append(y[i])
+    return np.array(filtered_x), np.array(filtered_y)
 ##################
 #SEQUENCE HANDLING
 ##################

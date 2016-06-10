@@ -3,6 +3,7 @@ import re
 
 import pysam
 import ms_utils
+import numpy as np
 
 
 def initialize_pool_sequence_mappings(experiment_settings, lib_settings):
@@ -33,10 +34,21 @@ class ms_Lib:
         self.get_property = self.experiment_settings.get_property
         self.get_rdir = experiment_settings.get_rdir
         self.get_wdir = experiment_settings.get_wdir
+
         print "unpickling %s counts" % lib_settings.sample_name
         self.pool_sequence_mappings = ms_utils.unPickle(self.lib_settings.get_sequence_counts())
+        #this summing has to happen after library initialization and unpickling
         self.total_mapped_fragments = sum([mapping.fragment_count for mapping in self.pool_sequence_mappings.values()])
 
+
+    def name_sorted_counts(self):
+        #returns counts for each sequence in pool, sorted by their sequence names, alphabetically
+        return np.array([self.pool_sequence_mappings[sequence_name].fragment_count for sequence_name in
+                         sorted(self.pool_sequence_mappings)])
+
+    def name_sorted_rpms(self):
+        # returns reads per million for each sequence in pool, sorted by their sequence names, alphabetically
+        return (10**6)*self.name_sorted_counts()/float(self.total_mapped_fragments)
 
     def get_single_TL_mappings(self, names_only = False):
         single_TL_mappings = set()
@@ -98,6 +110,8 @@ class ms_Lib:
     def get_fragment_count_distribution(self):
         return [self.pool_sequence_mappings[sequence].fragment_count for sequence in self.pool_sequence_mappings]
 
+    def get_rpm(self, sequence_name):
+        return (10**6)*self.get_pool_sequence_mapping(sequence_name).fragment_count/float(self.total_mapped_fragments)
 
 class pool_sequence_mapping:
     """
