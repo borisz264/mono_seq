@@ -50,6 +50,9 @@ class ms_Lib:
         # returns reads per million for each sequence in pool, sorted by their sequence names, alphabetically
         return (10**6)*self.name_sorted_counts()/float(self.total_mapped_fragments)
 
+    def sorted_names(self):
+        return sorted(self.pool_sequence_mappings.keys())
+
     def get_single_TL_mappings(self, names_only = False):
         single_TL_mappings = set()
         single_TL_names = set()
@@ -87,7 +90,7 @@ class ms_Lib:
         return self.lib_settings.sample_name
 
     def get_counts(self, sequence_name):
-        return self.pool_sequence_mappings[sequence_name].total_passing_reads
+        return self.pool_sequence_mappings[sequence_name].fragment_count
 
     def get_mappings_with_minimum_reads(self, minimum_reads, names_only = False):
         passing_mappings = set()

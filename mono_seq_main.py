@@ -68,6 +68,7 @@ class mse:
         ms_utils.make_dir(self.rdir_path('tables'))
         self.make_counts_table()
         self.make_counts_table(fractional=True)
+        self.make_monosome_recruitment_table()
 
     def make_plots(self):
         ms_utils.make_dir(self.rdir_path('plots'))
@@ -206,6 +207,7 @@ class mse:
         qc_engine.plot_average_read_positions()
         qc_engine.plot_fragment_length_distributions()
         qc_engine.plot_count_distributions()
+        qc_engine.read_cutoff_choice_plot()
 
     def make_counts_table(self, fractional=False):
         """
@@ -237,6 +239,34 @@ class mse:
                                                     for lib in self.libs]))
                 summary_file.write(out_line)
         summary_file.close()
+
+
+    def make_monosome_recruitment_table(self, read_cutoff=128):
+        """
+        write out number of fragments mapping to each TL in each dataset
+        :param fractional: if True, replace raw counts with library fraction in reads per million
+        :return:
+        """
+        output_file = open(os.path.join(
+            self.rdir_path('tables'),
+            'monosome_recruitment.txt'), 'w')
+
+        header = 'sequence name\t' + '\t'.join(['%s/(%s+%s)' % (self.monosome_libs[i].lib_settings.sample_name,
+                                                                self.monosome_libs[i].lib_settings.sample_name,
+                                                                self.mrnp_libs[i].lib_settings.sample_name)
+                                                for i in range(len(self.monosome_libs))]) + '\n'
+        output_file.write(header)
+        for sequence_name in self.monosome_libs[0].pool_sequence_mappings:
+            out_line = '%s\t%s\n' % (sequence_name,
+                                     '\t'.join(['%f' %
+                                                (self.monosome_libs[i].get_rpm(sequence_name)/
+                                                (self.monosome_libs[i].get_rpm(sequence_name)+
+                                                 self.mrnp_libs[i].get_rpm(sequence_name)))
+                                                if (self.monosome_libs[i].get_counts(sequence_name) +
+                                                 self.mrnp_libs[i].get_counts(sequence_name)) > read_cutoff else ''
+                                                for i in range(len(self.monosome_libs)) ]))
+            output_file.write(out_line)
+        output_file.close()
 
 def parse_args():
     parser = argparse.ArgumentParser()

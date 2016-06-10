@@ -321,3 +321,78 @@ class ms_qc:
           'tl_count_distributions.pdf')
         plt.savefig(out_name, transparent='True', format='pdf')
         plt.clf()
+
+    def read_cutoff_choice_plot(self):
+        '''
+        This should be similar to the supplementary figure from Ingolia 2009 to determine read cutoff.
+
+        :return:
+        '''
+        output_file = os.path.join(
+            self.mse.settings.get_rdir(),
+            'QC',
+            'cutoff_choice.pdf')
+        libs = self.mse.monosome_libs
+        num_libs = len(libs)
+        num_plots_wide = num_libs-1
+        num_plots_high = num_libs-1
+        fig = plt.figure(figsize=(8,8))
+
+        bins = []
+        currentBinCeiling = 16
+        while currentBinCeiling <= (2**12)+1:  # add 1 integer of wiggle room because of floating point error in sqrt(2) calculation
+            bins.append(currentBinCeiling)
+            currentBinCeiling = currentBinCeiling * math.sqrt(2)
+
+
+        for i in range(len(libs)):
+            for j in range(i+1, len(libs)):
+                plot_index = (j-1)*(num_plots_wide)+(i+1)
+                plot = fig.add_subplot(num_plots_high, num_plots_wide, plot_index)
+                binnedGenes = {}
+                for binCeiling in bins:
+                    binnedGenes[binCeiling] = []
+                for sequence_name in libs[i].sorted_names():
+                    total = libs[i].get_counts(sequence_name) + libs[j].get_counts(sequence_name)
+                    if total <= 0:
+                        continue
+                    else:
+                        for bini in range(len(bins)):
+                            if total <= bins[bini]:
+                                binnedGenes[bins[bini]].append(sequence_name)
+                                break
+                                # if it's bigger than all the bins, add it to the last one
+                        if total > bins[-1]:
+                            binnedGenes[bins[-1]].append(sequence_name)
+                binStDevs = {}
+                for bin in binnedGenes:
+                    values = []
+                    for sequence_name in binnedGenes[bin]:
+                        rep1Val = libs[i].get_counts(sequence_name)
+                        total = rep1Val + libs[j].get_counts(sequence_name)
+                        ratio = rep1Val / float(total)
+                        values.append(ratio)
+                    binStDevs[bin] = np.std(values)
+
+
+                x = sorted(binStDevs.keys())
+                y = np.array([binStDevs[bin] for bin in x])
+
+
+                plot.set_xlabel("%s+%s counts" % (libs[i].lib_settings.sample_name, libs[j].lib_settings.sample_name))
+                plot.set_ylabel("std dev %s/(%s+%s) counts" % (libs[i].lib_settings.sample_name,
+                                                               libs[i].lib_settings.sample_name,
+                                                               libs[j].lib_settings.sample_name))
+                t = np.arange(2.0, 2.**15, 1.)
+                p = float(libs[i].total_mapped_fragments) / float(libs[j].total_mapped_fragments + libs[i].total_mapped_fragments)
+                expected = np.sqrt(p*(1.0-p)/t)  # will plot expected value from binomial counting
+
+
+                plot.set_xscale('log', basex=2)
+                #plot.set_yscale('symlog', linthreshy=0.01)
+                plot.scatter(x, y, color=ms_utils.blue, s=4)
+                plot.plot(t, expected, color=ms_utils.vermillion, lw = 1, linestyle='dashed')
+                #plot.set_xlim(0, 1000)
+                #plot.set_ylim(0, 1000)
+        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1, wspace=0.4, hspace=0.4)
+        plt.savefig(output_file, transparent='True', format='pdf')
