@@ -1,6 +1,3 @@
-import operator
-import aColors
-
 __author__ = 'boris zinshteyn'
 """
 Intended for processing of 80s monosome-seq data from defined RNA pools
@@ -17,6 +14,9 @@ import ms_utils
 import ms_lib
 import ms_qc
 import ms_plotting
+from collections import defaultdict
+import numpy as np
+import scipy.stats as stats
 
 class mse:
     def __init__(self, settings, threads):
@@ -69,6 +69,8 @@ class mse:
         self.make_counts_table()
         self.make_counts_table(fractional=True)
         self.make_monosome_recruitment_table()
+        for anno_filename in self.settings.get_property('matched_set_annotations'):
+            self.make_matched_recruitment_change_table(anno_filename)
 
     def make_plots(self):
         ms_utils.make_dir(self.rdir_path('plots'))
@@ -243,8 +245,8 @@ class mse:
 
     def make_monosome_recruitment_table(self, read_cutoff=128):
         """
-        write out number of fragments mapping to each TL in each dataset
-        :param fractional: if True, replace raw counts with library fraction in reads per million
+        write out 80S recruitment metric for each TL in each replicate
+        :param read_cutoff: require this many read between mRNP and monosome to include this TL.
         :return:
         """
         output_file = open(os.path.join(
@@ -263,10 +265,72 @@ class mse:
                                                 (self.monosome_libs[i].get_rpm(sequence_name)+
                                                  self.mrnp_libs[i].get_rpm(sequence_name)))
                                                 if (self.monosome_libs[i].get_counts(sequence_name) +
-                                                 self.mrnp_libs[i].get_counts(sequence_name)) > read_cutoff else ''
+                                                 self.mrnp_libs[i].get_counts(sequence_name)) >= read_cutoff else ''
                                                 for i in range(len(self.monosome_libs)) ]))
             output_file.write(out_line)
         output_file.close()
+
+    def make_matched_recruitment_change_table(self, annotation_file, read_cutoff=128):
+        """
+        write out number of fragments mapping to each TL in each dataset
+        :param read_cutoff: require this many read between mRNP and monosome to include this TL.
+        :return:
+        """
+        set_name1, set_name2, matched_set = self.parse_matched_set_annotation(annotation_file)
+
+        output_file = open(os.path.join(
+            self.rdir_path('tables'),
+            '%s_%s_matched_monosome_recruitment_change.txt' % (set_name1, set_name2)), 'w')
+
+        header = '%s\t%s\t' % (set_name1, set_name2) + '\t'.join(['%s %s-%s recruitment score' % (self.monosome_libs[i].lib_settings.sample_name,
+                                                                                               set_name1, set_name2)
+                                                                for i in range(len(self.monosome_libs))]) + '\tttest p\n'
+        output_file.write(header)
+        for matched_pool_seqs in matched_set:
+            set1_scores = []
+            set2_scores = []
+            for i in range(len(self.monosome_libs)):
+                set_1_counts = self.monosome_libs[i].get_counts(matched_pool_seqs[0])\
+                               + self.mrnp_libs[i].get_counts(matched_pool_seqs[0])
+                set_2_counts = self.monosome_libs[i].get_counts(matched_pool_seqs[1]) \
+                               + self.mrnp_libs[i].get_counts(matched_pool_seqs[1])
+                # include only comparisons where the average number of reads is high enough
+                if set_1_counts >= read_cutoff and set_2_counts >= read_cutoff:
+                    set1_score = self.monosome_libs[i].get_rpm(matched_pool_seqs[0]) / \
+                                 (self.monosome_libs[i].get_rpm(matched_pool_seqs[0]) +
+                                  self.mrnp_libs[i].get_rpm(matched_pool_seqs[0]))
+                    set2_score = self.monosome_libs[i].get_rpm(matched_pool_seqs[1]) / \
+                                 (self.monosome_libs[i].get_rpm(matched_pool_seqs[1]) +
+                                  self.mrnp_libs[i].get_rpm(matched_pool_seqs[1]))
+                else:
+                    set1_score = float('nan')
+                    set2_score = float('nan')
+                set1_scores.append(set1_score)
+                set2_scores.append(set2_score)
+            recruitment_changes = np.array(set1_scores)-np.array(set2_scores)
+            scores_1_filtered, scores_2_filtered = ms_utils.filter_x_y_pairs(set1_scores, set2_scores)
+            if len(scores_1_filtered)>0 and len(scores_2_filtered)>0:
+                t, p = stats.ttest_ind(scores_1_filtered, scores_2_filtered)
+            else:
+                p = float('nan')
+            out_line = '%s\t%s\t%s\t%f\n' % (matched_pool_seqs[0], matched_pool_seqs[1],
+                                             '\t'.join(['%f' % score_change for score_change in recruitment_changes]),
+                                             p)
+            output_file.write(out_line)
+        output_file.close()
+
+    def parse_matched_set_annotation(self, filename):
+        matched_set = set()# a set of tuples matching a sequence name to one matched to it. sequences cana ppear multiple times, but the pairs ought to be unique
+
+        f = open(filename)
+        lines = f.readlines()
+        header = lines[0]
+        set_name1, set_name2 = header.strip().split('\t')
+        for line in lines[1:]:
+            seq_name1, seq_name2 = line.strip().split('\t')
+            matched_set.add((seq_name1, seq_name2))
+        f.close()
+        return set_name1, set_name2, matched_set
 
 def parse_args():
     parser = argparse.ArgumentParser()

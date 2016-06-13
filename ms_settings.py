@@ -49,7 +49,7 @@ class ms_settings:
         str_keys = ['read1_suffix', 'read2_suffix', 'read1_3p_adaptor_sequence', 'read2_5p_adaptor_sequence', 'rrna_index', 'genome_index', 'pool_append',
                     'pool_prepend']
         boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor']
-        list_str_keys = ['fastq_gz_prefixes', 'sample_names', 'mrnp_libraries', 'monosome_libraries', 'total_libraries', 'input_pools']
+        list_str_keys = ['fastq_gz_prefixes', 'sample_names', 'mrnp_libraries', 'monosome_libraries', 'total_libraries', 'input_pools', 'matched_set_annotations']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['pool_fasta',]
         config = ConfigParser.ConfigParser()
