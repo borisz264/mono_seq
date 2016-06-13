@@ -184,6 +184,37 @@ def filter_x_y_pairs(x, y, filter_list = [float('inf'), -1*float('inf')]):
             filtered_x.append(x[i])
             filtered_y.append(y[i])
     return np.array(filtered_x), np.array(filtered_y)
+
+def benjaminiHochbergCorrection(pValDict):
+    '''
+    takes a dictionary mapping key to p value
+    returns a dictionary of Benjamini-Hochberg corrected Q values
+
+    Q = p * n / k, where n is the # of observations, and k is the rank of the particular p-value among all p-values
+    '''
+    qValues = {}
+    sorted_p = sorted(pValDict.iteritems(), key=operator.itemgetter(1))
+    n = len(sorted_p)
+    for i in range(n):
+        k = i+1
+        q = sorted_p[i][1] * n / k
+        qValues[sorted_p[i][0]] = q
+    return qValues
+
+def bonferroniCorrection(pValDict):
+    '''
+    takes a dictionary mapping key to p value
+    returns a dictionary of Bonferroni corrected Q values
+
+    Q = p * n, where n is the # of observations
+    '''
+    qValues = {}
+    sorted_p = sorted(pValDict.iteritems(), key=operator.itemgetter(1))
+    n = len(sorted_p)
+    for i in range(n):
+        q = sorted_p[i][1] * n
+        qValues[sorted_p[i][0]] = q
+    return qValues
 ##################
 #SEQUENCE HANDLING
 ##################

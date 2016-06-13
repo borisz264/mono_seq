@@ -43,12 +43,12 @@ class ms_settings:
         - reads the settings file and converts str to float, list, etc.
         - stores result in self.settings as a dict()
         """
-        int_keys = [ 'read1_5p_bases_to_trim', 'read2_5p_bases_to_trim', 'minimum_reads_for_inclusion',
+        int_keys = [ 'read1_5p_bases_to_trim', 'read2_5p_bases_to_trim', 'comparison_read_cutoff',
                      'pool_5p_bases_to_trim', 'pool_3p_bases_to_trim', 'min_post_adaptor_length', 'quality_cutoff']
         #float_keys = []
         str_keys = ['read1_suffix', 'read2_suffix', 'read1_3p_adaptor_sequence', 'read2_5p_adaptor_sequence', 'rrna_index', 'genome_index', 'pool_append',
                     'pool_prepend']
-        boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor']
+        boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor', 'make_interactive_plots']
         list_str_keys = ['fastq_gz_prefixes', 'sample_names', 'mrnp_libraries', 'monosome_libraries', 'total_libraries', 'input_pools', 'matched_set_annotations']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['pool_fasta',]

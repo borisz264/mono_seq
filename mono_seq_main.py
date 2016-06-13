@@ -70,7 +70,8 @@ class mse:
         self.make_counts_table(fractional=True)
         self.make_monosome_recruitment_table()
         for anno_filename in self.settings.get_property('matched_set_annotations'):
-            self.make_matched_recruitment_change_table(anno_filename)
+            self.make_matched_recruitment_change_table(anno_filename,
+                                                       read_cutoff=self.settings.get_property('comparison_read_cutoff'))
 
     def make_plots(self):
         ms_utils.make_dir(self.rdir_path('plots'))
@@ -78,6 +79,10 @@ class mse:
         ms_plotting.monosome_over_mrnp_reproducibility(self)
         ms_plotting.monosome_over_total_reproducibility(self)
         ms_plotting.monosome_over_mrnp_plus_monosome_reproducibility(self)
+        if self.settings.get_property('make_interactive_plots'):
+            for anno_filename in self.settings.get_property('matched_set_annotations'):
+                ms_plotting.recruitment_change_rank_value_plot_interactive(self, anno_filename,
+                                                                           read_cutoff=self.settings.get_property('comparison_read_cutoff'))
 
     def remove_adaptor(self):
         if not self.settings.get_property('force_retrim'):
