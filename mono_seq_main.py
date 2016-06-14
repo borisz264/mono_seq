@@ -84,6 +84,10 @@ class mse:
                 ms_plotting.recruitment_change_rank_value_plot_interactive(self, anno_filename,
                                                                            read_cutoff=self.settings.get_property('comparison_read_cutoff'))
 
+                ms_plotting.recruitment_fold_change_rank_value_plot_interactive(self, anno_filename,
+                                                                               read_cutoff=self.settings.get_property(
+                                                                                   'comparison_read_cutoff'))
+
     def remove_adaptor(self):
         if not self.settings.get_property('force_retrim'):
             for lib_settings in self.settings.iter_lib_settings():

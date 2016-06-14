@@ -248,7 +248,113 @@ def recruitment_change_rank_value_plot_interactive(mse, annotation_file, read_cu
     PlotFig.line("x", "y", line_width=1, source=max_source, color=ms_utils.bokeh_skyBlue)
     PlotFig.x_range = Range1d(start=-1, end=len(sorted_means))
     PlotFig.y_range = Range1d(start=-1, end=1)
+    save(PlotFig)
 
+def recruitment_fold_change_rank_value_plot_interactive(mse, annotation_file, read_cutoff = 128, corrected_p_cutoff = 0.05):
+    from bokeh.plotting import figure, output_file, show, save, ColumnDataSource, gridplot
+    from bokeh.models import Range1d
+    from bokeh.models import HoverTool
+    from collections import OrderedDict
+    set_name1, set_name2, matched_set = mse.parse_matched_set_annotation(annotation_file)
 
+    # output to static HTML file
+    output_file_name = os.path.join(
+        mse.settings.get_rdir(),
+        'plots',
+        '%s_%s_recruitment_fold_change_rank_value.html' % (set_name1, set_name2))
+    output_file(output_file_name)
 
+    all_change_scores = {}
+    all_change_score_means = {}
+    all_p_values = {}
+    all_annotations = {}
+    for matched_pool_seqs in matched_set:
+        set1_scores = []
+        set2_scores = []
+        for i in range(len(mse.monosome_libs)):
+            set_1_counts = mse.monosome_libs[i].get_counts(matched_pool_seqs[0]) \
+                           + mse.mrnp_libs[i].get_counts(matched_pool_seqs[0])
+            set_2_counts = mse.monosome_libs[i].get_counts(matched_pool_seqs[1]) \
+                           + mse.mrnp_libs[i].get_counts(matched_pool_seqs[1])
+            # include only comparisons where the average number of reads is high enough
+            if set_1_counts >= read_cutoff and set_2_counts >= read_cutoff:
+                set1_score = mse.monosome_libs[i].get_rpm(matched_pool_seqs[0]) / \
+                             (mse.monosome_libs[i].get_rpm(matched_pool_seqs[0]) +
+                              mse.mrnp_libs[i].get_rpm(matched_pool_seqs[0]))
+                set2_score = mse.monosome_libs[i].get_rpm(matched_pool_seqs[1]) / \
+                             (mse.monosome_libs[i].get_rpm(matched_pool_seqs[1]) +
+                              mse.mrnp_libs[i].get_rpm(matched_pool_seqs[1]))
+            else:
+                set1_score = float('nan')
+                set2_score = float('nan')
+            set1_scores.append(set1_score)
+            set2_scores.append(set2_score)
+        scores_1_filtered, scores_2_filtered = ms_utils.filter_x_y_pairs(set1_scores, set2_scores)
+        recruitment_changes = numpy.array(scores_1_filtered) / numpy.array(scores_2_filtered)
+        if len(scores_1_filtered) > 0 and len(scores_2_filtered) > 0:
+            comparison = (matched_pool_seqs[0], matched_pool_seqs[1])
+            t, p = stats.ttest_ind(scores_1_filtered, scores_2_filtered)
+            all_change_scores[comparison] = recruitment_changes
+            all_p_values[comparison] = p
+            average = numpy.average(recruitment_changes)
+            all_change_score_means[comparison] = average
+            all_annotations[comparison] = '%s-%s=%.3f, p=%f' % (matched_pool_seqs[0], matched_pool_seqs[1], average, p)
+    bh_corrected_p_values = ms_utils.bonferroniCorrection(all_p_values)
+    sorted_means = sorted(all_change_score_means.iteritems(), key=operator.itemgetter(1))
+    sig_ranks = [] #will store rank values for passing p values
+    sig_means = []
+    sig_com1 = []
+    sig_com2 = []
+    sig_p = []
+    sig_n = []
+
+    insig_ranks = [] #will store rank values for failing p values
+    insig_means = []
+    insig_anno = []
+    insig_com1 = []
+    insig_com2 = []
+    insig_p = []
+    insig_n = []
+    for rank in range(len(sorted_means)):
+        comparison, mean = sorted_means[rank]
+        if bh_corrected_p_values[comparison]<corrected_p_cutoff:
+            sig_ranks.append(rank)
+            sig_means.append(mean)
+            sig_com1.append(comparison[0])
+            sig_com2.append(comparison[1])
+            sig_p.append(bh_corrected_p_values[comparison])
+            sig_n.append(len(all_change_scores[comparison]))
+        else:
+            insig_ranks.append(rank)
+            insig_means.append(mean)
+            insig_anno.append(all_annotations[comparison])
+            insig_com1.append(comparison[0])
+            insig_com2.append(comparison[1])
+            insig_p.append(bh_corrected_p_values[comparison])
+            insig_n.append(len(all_change_scores[comparison]))
+    all_ranks = range(len(sorted_means))
+    all_max = [max(all_change_scores[sorted_means[rank][0]]) for rank in all_ranks]
+    all_min = [min(all_change_scores[sorted_means[rank][0]]) for rank in all_ranks]
+    source = ColumnDataSource(data=dict(x=insig_ranks, y=insig_means, com1=insig_com1, com2=insig_com2, p=insig_p, n=insig_n, value=insig_means))
+    sig_source = ColumnDataSource(data=dict(x=sig_ranks, y=sig_means, com1=sig_com1, com2=sig_com2, p=sig_p, n=sig_n, value=sig_means))
+    max_source = ColumnDataSource(data=dict(x=all_ranks, y=all_max))
+    min_source = ColumnDataSource(data=dict(x=all_ranks, y=all_min))
+    hover = HoverTool(names=['insig', 'sig'])
+    TOOLS = "pan,wheel_zoom,reset,save"
+    PlotFig = figure(x_axis_label="rank", y_axis_label="%s/%s fold recruitment change" % (set_name1, set_name2),
+                     tools=[TOOLS,hover], toolbar_location="right", y_axis_type="log")
+    PlotFig.circle("x", "y", size=5, source=source, color=ms_utils.bokeh_black, name = 'insig')
+    PlotFig.circle("x", "y", size=5, source=sig_source, color=ms_utils.bokeh_vermillion, name = 'sig')
+    # adjust what information you get when you hover over it
+
+    hover.tooltips = OrderedDict([("%s" % set_name1, "@com1"),
+                                  ("%s" % set_name2, "@com2"),
+                                  ("mean", "@value"),
+                                  ("Bonf. p", "@p"),
+                                  ("n", "@n")])
+
+    PlotFig.line("x", "y", line_width=1, source=min_source, color=ms_utils.bokeh_skyBlue)
+    PlotFig.line("x", "y", line_width=1, source=max_source, color=ms_utils.bokeh_skyBlue)
+    PlotFig.x_range = Range1d(start=-1, end=len(sorted_means))
+    PlotFig.y_range = Range1d(start=.01, end=100)
     save(PlotFig)
