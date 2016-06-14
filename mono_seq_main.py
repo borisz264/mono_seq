@@ -293,7 +293,10 @@ class mse:
 
         header = '%s\t%s\t' % (set_name1, set_name2) + '\t'.join(['%s %s-%s recruitment score' % (self.monosome_libs[i].lib_settings.sample_name,
                                                                                                set_name1, set_name2)
-                                                                for i in range(len(self.monosome_libs))]) + '\tttest p\n'
+                                                                for i in range(len(self.monosome_libs))]) + '\t'+\
+                 '\t'.join(['%s %s/%s recruitment score' % (self.monosome_libs[i].lib_settings.sample_name,
+                                                                                               set_name1, set_name2)
+                                                                for i in range(len(self.monosome_libs))])+'\tttest p\n'
         output_file.write(header)
         for matched_pool_seqs in matched_set:
             set1_scores = []
@@ -317,13 +320,15 @@ class mse:
                 set1_scores.append(set1_score)
                 set2_scores.append(set2_score)
             recruitment_changes = np.array(set1_scores)-np.array(set2_scores)
+            recruitment_fold_changes = np.array(set1_scores)/np.array(set2_scores)
             scores_1_filtered, scores_2_filtered = ms_utils.filter_x_y_pairs(set1_scores, set2_scores)
             if len(scores_1_filtered)>0 and len(scores_2_filtered)>0:
                 t, p = stats.ttest_ind(scores_1_filtered, scores_2_filtered)
             else:
                 p = float('nan')
-            out_line = '%s\t%s\t%s\t%f\n' % (matched_pool_seqs[0], matched_pool_seqs[1],
+            out_line = '%s\t%s\t%s\t%s\t%f\n' % (matched_pool_seqs[0], matched_pool_seqs[1],
                                              '\t'.join(['%f' % score_change for score_change in recruitment_changes]),
+                                             '\t'.join(['%f' % score_change for score_change in recruitment_fold_changes]),
                                              p)
             output_file.write(out_line)
         output_file.close()
