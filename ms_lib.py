@@ -39,7 +39,7 @@ class ms_Lib:
         self.pool_sequence_mappings = ms_utils.unPickle(self.lib_settings.get_sequence_counts())
         #this summing has to happen after library initialization and unpickling
         self.total_mapped_fragments = sum([mapping.fragment_count for mapping in self.pool_sequence_mappings.values()])
-
+        self.log_mapping_tags()
 
     def name_sorted_counts(self):
         #returns counts for each sequence in pool, sorted by their sequence names, alphabetically
@@ -115,6 +115,14 @@ class ms_Lib:
 
     def get_rpm(self, sequence_name):
         return (10**6)*self.get_pool_sequence_mapping(sequence_name).fragment_count/float(self.total_mapped_fragments)
+    def log_mapping_tags(self):
+        "writes aggregate paired-end mapping tag data to log file as a sanity check"
+        aggregate_dict = defaultdict(int)
+        for pool_seq in self.pool_sequence_mappings.values():
+            for mapping_tag in pool_seq.paired_end_mapping_tags:
+                aggregate_dict[mapping_tag] += pool_seq.paired_end_mapping_tags[mapping_tag]
+        self.lib_settings.write_to_log('PE mapping tags- %s' % (', '.join(['%s:%d' % (tag, aggregate_dict[tag]) for
+                                                                           tag in aggregate_dict])))
 
 class pool_sequence_mapping:
     """
