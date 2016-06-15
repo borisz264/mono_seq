@@ -358,3 +358,100 @@ def recruitment_fold_change_rank_value_plot_interactive(mse, annotation_file, re
     PlotFig.x_range = Range1d(start=-1, end=len(sorted_means))
     PlotFig.y_range = Range1d(start=.01, end=100)
     save(PlotFig)
+
+def plot_recruitment_violins(mse, annotation_file, read_cutoff = 128):
+
+    #Makes violin plots of recruitment scores
+    set_name1, set_name2, matched_set = mse.parse_matched_set_annotation(annotation_file)
+
+    # output to static HTML file
+    output_file_name = os.path.join(
+        mse.settings.get_rdir(),
+        'plots',
+        '%s_%s_violin.pdf' % (set_name1, set_name2))
+
+    legends = []
+    data = []
+    set1_seqs = [pair[0] for pair in matched_set]
+    set2_seqs = [pair[1] for pair in matched_set]
+    all_seqs = mse.monosome_libs[0].sorted_names()
+    set_members = {set_name1:set1_seqs, set_name2:set2_seqs, 'all':all_seqs}
+
+    for lib_index in range(len(mse.monosome_libs)):
+        for set_type in [set_name1, set_name2]:
+            legends.append('%s %s' % (mse.monosome_libs[lib_index].lib_settings.sample_name, set_type))
+            scores = []
+            for seq_name in set_members[set_type]:
+                counts = mse.monosome_libs[lib_index].get_counts(seq_name) \
+                         + mse.mrnp_libs[lib_index].get_counts(seq_name)
+                if counts >= read_cutoff:
+                    recruitment_score = mse.monosome_libs[lib_index].get_rpm(seq_name) / \
+                                 (mse.monosome_libs[lib_index].get_rpm(seq_name) +
+                                  mse.mrnp_libs[lib_index].get_rpm(seq_name))
+                    scores.append(recruitment_score)
+            data.append(scores)
+    p_file_name = os.path.join(
+        mse.settings.get_rdir(),
+        'plots',
+        '%s_%s_violin.ks_p.txt' % (set_name1, set_name2))
+    g=open(p_file_name, 'w')
+    g.write('datset1\tdataset2\tKS d\tKS p\tt-test t\tt-test p\n')
+    for i in range(len(legends)):
+        for j in range(len(legends)):
+            d, p = stats.ks_2samp(data[i], data[j])
+            tind, pind = stats.ttest_ind(data[i], data[j])
+            g.write('%s\t%s\t%.3f\t%.3e\t%.3f\t%.3e\t\n' % (legends[i], legends[j], d, p, tind, pind))
+    g.close()
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+
+    # Hide the grid behind plot objects
+    ax1.yaxis.grid(True, linestyle='-', which='major', color='lightgrey', alpha=0.5)
+    ax1.set_axisbelow(True)
+    ax1.set_ylabel('monosome recruitment score')
+    #ax1.set_xlabel(ylabel)
+    plt.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.25)
+
+    pos = range(1,len(data)+1)  # starts at 1 to play nice with boxplot
+    dist = max(pos)-min(pos)
+    w = min(0.15*max(dist,1.0),0.5)
+    for d,p in zip(data,pos):
+        d = [float(dm) for dm in d]
+        k = stats.gaussian_kde(d) #calculates the kernel density
+        m = k.dataset.min() #lower bound of violin
+        M = k.dataset.max() #upper bound of violin
+        x = numpy.arange(m,M,(M-m)/100.) # support for violin
+        v = k.evaluate(x) #violin profile (density curve)
+        #print 'v=',v
+        v = v/v.max()*w #scaling the violin to the available space
+        if 'all' in legends[p-1]:
+            color = (0, 0, 0)
+        elif set_name1 in legends[p-1]:
+            color = (0/255., 159/255., 115/255)
+        elif set_name2 in legends[p-1]:
+            color = (213/255., 94/255., 0)
+        else:
+            print legends[p-1]
+        plt.fill_betweenx(x,p,v+p,facecolor=color,alpha=0.3)
+        plt.fill_betweenx(x,p,-v+p,facecolor=color,alpha=0.3)
+    if True:
+        bplot = plt.boxplot(data,notch=1)
+        plt.setp(bplot['boxes'], color='black')
+        plt.setp(bplot['whiskers'], color='black')
+        plt.setp(bplot['fliers'], color='red', marker='.')
+
+    per50s = []
+    i = 1
+    for datum in data:
+        #per50s.append(stats.scoreatpercentile(datum, 50))
+        t = stats.scoreatpercentile(datum, 50)
+
+        per50s.append(t)
+        ax1.annotate(str(round(t,3)), xy=(i+0.1, t), xycoords='data', arrowprops=None, fontsize='small', color='black')
+        i+= 1
+    #ax1.set_xticks([0.0, 0.5, 1.0, 1.5])
+    ax1.set_ylim(0, 1)
+    xtickNames = plt.setp(ax1, xticklabels=legends)
+    plt.setp(xtickNames, rotation=90, fontsize=6)
+    plt.savefig(output_file_name, transparent='True', format='pdf')

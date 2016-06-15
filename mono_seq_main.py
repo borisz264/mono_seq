@@ -79,8 +79,10 @@ class mse:
         ms_plotting.monosome_over_mrnp_reproducibility(self)
         ms_plotting.monosome_over_total_reproducibility(self)
         ms_plotting.monosome_over_mrnp_plus_monosome_reproducibility(self)
-        if self.settings.get_property('make_interactive_plots'):
-            for anno_filename in self.settings.get_property('matched_set_annotations'):
+        for anno_filename in self.settings.get_property('matched_set_annotations'):
+            ms_plotting.plot_recruitment_violins(self, anno_filename,
+                                                 read_cutoff=self.settings.get_property('comparison_read_cutoff'))
+            if self.settings.get_property('make_interactive_plots'):
                 ms_plotting.recruitment_change_rank_value_plot_interactive(self, anno_filename,
                                                                            read_cutoff=self.settings.get_property('comparison_read_cutoff'))
 
