@@ -378,6 +378,7 @@ def plot_recruitment_violins(mse, annotation_file, read_cutoff = 128):
     set_members = {set_name1:set1_seqs, set_name2:set2_seqs, 'all':all_seqs}
 
     for lib_index in range(len(mse.monosome_libs)):
+        scores_dict = {}
         for set_type in [set_name1, set_name2]:
             legends.append('%s %s' % (mse.monosome_libs[lib_index].lib_settings.sample_name, set_type))
             scores = []
@@ -390,6 +391,9 @@ def plot_recruitment_violins(mse, annotation_file, read_cutoff = 128):
                                   mse.mrnp_libs[lib_index].get_rpm(seq_name))
                     scores.append(recruitment_score)
             data.append(scores)
+            scores_dict[set_type] = scores
+        u, up = stats.mannwhitneyu(scores_dict[set_name1], scores_dict[set_name2],)
+        print mse.monosome_libs[lib_index].lib_settings.sample_name, set_name1, set_name2, up
     p_file_name = os.path.join(
         mse.settings.get_rdir(),
         'plots',
@@ -455,3 +459,200 @@ def plot_recruitment_violins(mse, annotation_file, read_cutoff = 128):
     xtickNames = plt.setp(ax1, xticklabels=legends)
     plt.setp(xtickNames, rotation=90, fontsize=6)
     plt.savefig(output_file_name, transparent='True', format='pdf')
+
+def recruitment_change_rank_value_plot_static(mse, annotation_file, read_cutoff = 128, corrected_p_cutoff = 0.05):
+
+    #Makes violin plots of recruitment scores
+    set_name1, set_name2, matched_set = mse.parse_matched_set_annotation(annotation_file)
+
+    # output to static HTML file
+    output_file_name = os.path.join(
+        mse.settings.get_rdir(),
+        'plots',
+        '%s_%s_rank_change.pdf' % (set_name1, set_name2))
+
+    all_change_scores = {}
+    all_change_score_means = {}
+    all_p_values = {}
+    all_annotations = {}
+    for matched_pool_seqs in matched_set:
+        set1_scores = []
+        set2_scores = []
+        for i in range(len(mse.monosome_libs)):
+            set_1_counts = mse.monosome_libs[i].get_counts(matched_pool_seqs[0]) \
+                           + mse.mrnp_libs[i].get_counts(matched_pool_seqs[0])
+            set_2_counts = mse.monosome_libs[i].get_counts(matched_pool_seqs[1]) \
+                           + mse.mrnp_libs[i].get_counts(matched_pool_seqs[1])
+            # include only comparisons where the average number of reads is high enough
+            if set_1_counts >= read_cutoff and set_2_counts >= read_cutoff:
+                set1_score = mse.monosome_libs[i].get_rpm(matched_pool_seqs[0]) / \
+                             (mse.monosome_libs[i].get_rpm(matched_pool_seqs[0]) +
+                              mse.mrnp_libs[i].get_rpm(matched_pool_seqs[0]))
+                set2_score = mse.monosome_libs[i].get_rpm(matched_pool_seqs[1]) / \
+                             (mse.monosome_libs[i].get_rpm(matched_pool_seqs[1]) +
+                              mse.mrnp_libs[i].get_rpm(matched_pool_seqs[1]))
+            else:
+                set1_score = float('nan')
+                set2_score = float('nan')
+            set1_scores.append(set1_score)
+            set2_scores.append(set2_score)
+        scores_1_filtered, scores_2_filtered = ms_utils.filter_x_y_pairs(set1_scores, set2_scores)
+        recruitment_changes = numpy.array(scores_1_filtered) - numpy.array(scores_2_filtered)
+        if len(scores_1_filtered) > 0 and len(scores_2_filtered) > 0:
+            comparison = (matched_pool_seqs[0], matched_pool_seqs[1])
+            t, p = stats.ttest_ind(scores_1_filtered, scores_2_filtered)
+            all_change_scores[comparison] = recruitment_changes
+            all_p_values[comparison] = p
+            average = numpy.average(recruitment_changes)
+            all_change_score_means[comparison] = average
+            all_annotations[comparison] = '%s-%s=%.3f, p=%f' % (matched_pool_seqs[0], matched_pool_seqs[1], average, p)
+    bh_corrected_p_values = ms_utils.bonferroniCorrection(all_p_values)
+    sorted_means = sorted(all_change_score_means.iteritems(), key=operator.itemgetter(1))
+    sig_ranks = [] #will store rank values for passing p values
+    sig_means = []
+    sig_com1 = []
+    sig_com2 = []
+    sig_p = []
+    sig_n = []
+
+    insig_ranks = [] #will store rank values for failing p values
+    insig_means = []
+    insig_anno = []
+    insig_com1 = []
+    insig_com2 = []
+    insig_p = []
+    insig_n = []
+    for rank in range(len(sorted_means)):
+        comparison, mean = sorted_means[rank]
+        if bh_corrected_p_values[comparison]<corrected_p_cutoff:
+            sig_ranks.append(rank)
+            sig_means.append(mean)
+            sig_com1.append(comparison[0])
+            sig_com2.append(comparison[1])
+            sig_p.append(bh_corrected_p_values[comparison])
+            sig_n.append(len(all_change_scores[comparison]))
+        else:
+            insig_ranks.append(rank)
+            insig_means.append(mean)
+            insig_anno.append(all_annotations[comparison])
+            insig_com1.append(comparison[0])
+            insig_com2.append(comparison[1])
+            insig_p.append(bh_corrected_p_values[comparison])
+            insig_n.append(len(all_change_scores[comparison]))
+    all_ranks = range(len(sorted_means))
+    all_max = [max(all_change_scores[sorted_means[rank][0]]) for rank in all_ranks]
+    all_min = [min(all_change_scores[sorted_means[rank][0]]) for rank in all_ranks]
+    fig = plt.figure(figsize=(8,8))
+    ax1 = fig.add_subplot(111)
+
+    ax1.yaxis.grid(True, linestyle='-', which='major', color='lightgrey')
+
+    ax1.set_ylabel("%s-%s recruitment change" % (set_name1, set_name2))
+    ax1.set_xlabel('rank')
+    ax1.scatter(insig_ranks, insig_means, color = ms_utils.black)
+    ax1.scatter(sig_ranks, sig_means, color=ms_utils.vermillion)
+    ax1.plot(all_ranks, all_max, color=ms_utils.skyBlue)
+    ax1.plot(all_ranks, all_min, color=ms_utils.skyBlue)
+
+    ax1.set_ylim(-1, 1)
+    ax1.set_xlim(-1, max(all_ranks)+1)
+    plt.savefig(output_file_name, transparent='True', format='pdf')
+
+def reverse_recruitment_change_rank_value_plot_static(mse, annotation_file, read_cutoff = 128, corrected_p_cutoff = 0.05):
+
+    #Makes violin plots of recruitment scores
+    set_name1, set_name2, matched_set = mse.parse_matched_set_annotation(annotation_file)
+
+    # output to static HTML file
+    output_file_name = os.path.join(
+        mse.settings.get_rdir(),
+        'plots',
+        '%s_%s_rank_change.pdf' % (set_name2, set_name1))
+
+    all_change_scores = {}
+    all_change_score_means = {}
+    all_p_values = {}
+    all_annotations = {}
+    for matched_pool_seqs in matched_set:
+        set1_scores = []
+        set2_scores = []
+        for i in range(len(mse.monosome_libs)):
+            set_1_counts = mse.monosome_libs[i].get_counts(matched_pool_seqs[0]) \
+                           + mse.mrnp_libs[i].get_counts(matched_pool_seqs[0])
+            set_2_counts = mse.monosome_libs[i].get_counts(matched_pool_seqs[1]) \
+                           + mse.mrnp_libs[i].get_counts(matched_pool_seqs[1])
+            # include only comparisons where the average number of reads is high enough
+            if set_1_counts >= read_cutoff and set_2_counts >= read_cutoff:
+                set1_score = mse.monosome_libs[i].get_rpm(matched_pool_seqs[0]) / \
+                             (mse.monosome_libs[i].get_rpm(matched_pool_seqs[0]) +
+                              mse.mrnp_libs[i].get_rpm(matched_pool_seqs[0]))
+                set2_score = mse.monosome_libs[i].get_rpm(matched_pool_seqs[1]) / \
+                             (mse.monosome_libs[i].get_rpm(matched_pool_seqs[1]) +
+                              mse.mrnp_libs[i].get_rpm(matched_pool_seqs[1]))
+            else:
+                set1_score = float('nan')
+                set2_score = float('nan')
+            set1_scores.append(set1_score)
+            set2_scores.append(set2_score)
+        scores_1_filtered, scores_2_filtered = ms_utils.filter_x_y_pairs(set1_scores, set2_scores)
+        recruitment_changes = numpy.array(scores_2_filtered) - numpy.array(scores_1_filtered)
+        if len(scores_1_filtered) > 0 and len(scores_2_filtered) > 0:
+            comparison = (matched_pool_seqs[1], matched_pool_seqs[0])
+            t, p = stats.ttest_ind(scores_1_filtered, scores_2_filtered)
+            all_change_scores[comparison] = recruitment_changes
+            all_p_values[comparison] = p
+            average = numpy.average(recruitment_changes)
+            all_change_score_means[comparison] = average
+            all_annotations[comparison] = '%s-%s=%.3f, p=%f' % (matched_pool_seqs[1], matched_pool_seqs[0], average, p)
+    bh_corrected_p_values = ms_utils.bonferroniCorrection(all_p_values)
+    sorted_means = sorted(all_change_score_means.iteritems(), key=operator.itemgetter(1))
+    sig_ranks = [] #will store rank values for passing p values
+    sig_means = []
+    sig_com1 = []
+    sig_com2 = []
+    sig_p = []
+    sig_n = []
+
+    insig_ranks = [] #will store rank values for failing p values
+    insig_means = []
+    insig_anno = []
+    insig_com1 = []
+    insig_com2 = []
+    insig_p = []
+    insig_n = []
+    for rank in range(len(sorted_means)):
+        comparison, mean = sorted_means[rank]
+        if bh_corrected_p_values[comparison]<corrected_p_cutoff:
+            sig_ranks.append(rank)
+            sig_means.append(mean)
+            sig_com1.append(comparison[0])
+            sig_com2.append(comparison[1])
+            sig_p.append(bh_corrected_p_values[comparison])
+            sig_n.append(len(all_change_scores[comparison]))
+        else:
+            insig_ranks.append(rank)
+            insig_means.append(mean)
+            insig_anno.append(all_annotations[comparison])
+            insig_com1.append(comparison[0])
+            insig_com2.append(comparison[1])
+            insig_p.append(bh_corrected_p_values[comparison])
+            insig_n.append(len(all_change_scores[comparison]))
+    all_ranks = range(len(sorted_means))
+    all_max = [max(all_change_scores[sorted_means[rank][0]]) for rank in all_ranks]
+    all_min = [min(all_change_scores[sorted_means[rank][0]]) for rank in all_ranks]
+    fig = plt.figure(figsize=(8,8))
+    ax1 = fig.add_subplot(111)
+
+    ax1.yaxis.grid(True, linestyle='-', which='major', color='lightgrey')
+
+    ax1.set_ylabel("%s-%s recruitment change" % (set_name2, set_name1))
+    ax1.set_xlabel('rank')
+    ax1.scatter(insig_ranks, insig_means, color = ms_utils.black)
+    ax1.scatter(sig_ranks, sig_means, color=ms_utils.vermillion)
+    ax1.plot(all_ranks, all_max, color=ms_utils.skyBlue)
+    ax1.plot(all_ranks, all_min, color=ms_utils.skyBlue)
+
+    ax1.set_ylim(-1, 1)
+    ax1.set_xlim(-1, max(all_ranks)+1)
+    plt.savefig(output_file_name, transparent='True', format='pdf')
+

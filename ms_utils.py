@@ -219,6 +219,8 @@ def bonferroniCorrection(pValDict):
 #SEQUENCE HANDLING
 ##################
 
+def rna(dna_seq):
+    return dna_seq.replace('T','U').replace('t', 'u')
 
 def get_barcode(line):
     """

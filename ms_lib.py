@@ -11,7 +11,6 @@ def initialize_pool_sequence_mappings(experiment_settings, lib_settings):
     if experiment_settings.get_property('force_recount') or not lib_settings.sequence_counts_exist():
         print "counting BAM reads"
         pool_sequence_mappings = {}
-        gene_names = []
         trimmed_sequences = ms_utils.convertFastaToDict(experiment_settings.get_trimmed_pool_fasta())
         samfile = pysam.Samfile(lib_settings.get_mapped_reads(), "rb")
         for sequence_name in trimmed_sequences:

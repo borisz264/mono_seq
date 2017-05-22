@@ -69,19 +69,29 @@ class mse:
         self.make_counts_table()
         self.make_counts_table(fractional=True)
         self.make_monosome_recruitment_table()
+        self.write_sequence_subset(0, read_cutoff=128)
+        self.write_sequence_subset(0.8, read_cutoff=128)
+        self.write_sequence_subset(0.7, read_cutoff=128)
         for anno_filename in self.settings.get_property('matched_set_annotations'):
             self.make_matched_recruitment_change_table(anno_filename,
                                                        read_cutoff=self.settings.get_property('comparison_read_cutoff'))
 
     def make_plots(self):
         ms_utils.make_dir(self.rdir_path('plots'))
-        ms_plotting.all_library_rpm_scatter(self)
-        ms_plotting.monosome_over_mrnp_reproducibility(self)
-        ms_plotting.monosome_over_total_reproducibility(self)
-        ms_plotting.monosome_over_mrnp_plus_monosome_reproducibility(self)
+
+        #ms_plotting.all_library_rpm_scatter(self)
+        #ms_plotting.monosome_over_mrnp_reproducibility(self)
+        #ms_plotting.monosome_over_total_reproducibility(self)
+        #ms_plotting.monosome_over_mrnp_plus_monosome_reproducibility(self)
         for anno_filename in self.settings.get_property('matched_set_annotations'):
             ms_plotting.plot_recruitment_violins(self, anno_filename,
                                                  read_cutoff=self.settings.get_property('comparison_read_cutoff'))
+            '''
+            ms_plotting.recruitment_change_rank_value_plot_static(self, anno_filename,
+                                                 read_cutoff=self.settings.get_property('comparison_read_cutoff'))
+            ms_plotting.reverse_recruitment_change_rank_value_plot_static(self, anno_filename,
+                                                 read_cutoff=self.settings.get_property('comparison_read_cutoff'))
+
             if self.settings.get_property('make_interactive_plots'):
                 ms_plotting.recruitment_change_rank_value_plot_interactive(self, anno_filename,
                                                                            read_cutoff=self.settings.get_property('comparison_read_cutoff'))
@@ -89,7 +99,7 @@ class mse:
                 ms_plotting.recruitment_fold_change_rank_value_plot_interactive(self, anno_filename,
                                                                                read_cutoff=self.settings.get_property(
                                                                                    'comparison_read_cutoff'))
-
+            '''
     def remove_adaptor(self):
         if not self.settings.get_property('force_retrim'):
             for lib_settings in self.settings.iter_lib_settings():
@@ -263,14 +273,14 @@ class mse:
         output_file = open(os.path.join(
             self.rdir_path('tables'),
             'monosome_recruitment.txt'), 'w')
-
-        header = 'sequence name\t' + '\t'.join(['%s/(%s+%s)' % (self.monosome_libs[i].lib_settings.sample_name,
+        trimmed_sequences = ms_utils.convertFastaToDict(self.settings.get_trimmed_pool_fasta())
+        header = 'sequence name\tsequence\t' + '\t'.join(['%s/(%s+%s)' % (self.monosome_libs[i].lib_settings.sample_name,
                                                                 self.monosome_libs[i].lib_settings.sample_name,
                                                                 self.mrnp_libs[i].lib_settings.sample_name)
                                                 for i in range(len(self.monosome_libs))]) + '\n'
         output_file.write(header)
         for sequence_name in self.monosome_libs[0].pool_sequence_mappings:
-            out_line = '%s\t%s\n' % (sequence_name,
+            out_line = '%s\t%s\t%s\n' % (sequence_name, trimmed_sequences[sequence_name],
                                      '\t'.join(['%f' %
                                                 (self.monosome_libs[i].get_rpm(sequence_name)/
                                                 (self.monosome_libs[i].get_rpm(sequence_name)+
@@ -279,6 +289,32 @@ class mse:
                                                  self.mrnp_libs[i].get_counts(sequence_name)) >= read_cutoff else ''
                                                 for i in range(len(self.monosome_libs)) ]))
             output_file.write(out_line)
+        output_file.close()
+
+
+    def write_sequence_subset(self, recruitment_cutoff, read_cutoff=128, as_RNA=True):
+        """
+        write out fasta of all sequences that pass a certain recruitment cutoff in all libraries
+        :return:
+        """
+        output_file = open(os.path.join(
+            self.rdir_path('tables'),
+            'recruitment_above_%f.fasta' % recruitment_cutoff), 'w')
+        trimmed_sequences = ms_utils.convertFastaToDict(self.settings.get_trimmed_pool_fasta())
+
+        for sequence_name in self.monosome_libs[0].pool_sequence_mappings:
+            rec_scores = [(self.monosome_libs[i].get_rpm(sequence_name) / (self.monosome_libs[i].get_rpm(sequence_name) +
+                                                                           self.mrnp_libs[i].get_rpm(sequence_name)))
+                          for i in range(len(self.monosome_libs)) if (self.monosome_libs[i].get_counts(sequence_name) +
+                              self.mrnp_libs[i].get_counts(sequence_name)) >= read_cutoff]
+            if (len(rec_scores) == len(self.monosome_libs)):
+                average_score = np.average(rec_scores)
+                if average_score >=recruitment_cutoff:
+                    output_file.write('>%s_rec_%f\n' % (sequence_name, average_score))
+                    seq = trimmed_sequences[sequence_name]
+                    if as_RNA:
+                        seq = ms_utils.rna(seq)
+                    output_file.write('%s\n' % (seq))
         output_file.close()
 
     def make_matched_recruitment_change_table(self, annotation_file, read_cutoff=128):
